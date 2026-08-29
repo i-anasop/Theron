@@ -23,3 +23,10 @@ next-env.d.ts
 npm-debug.log*
 .vercel
 *.tsbuildinfo
+
+.vercel
+.env*
+
+# keep the template committed
+!.env.example
+.cron-secret.txt

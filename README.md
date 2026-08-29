@@ -167,9 +167,13 @@ Or `LLM_BASE_URL` + `LLM_API_KEY` + `LLM_MODEL` for any OpenAI-compatible endpoi
 
 ## Autonomy
 
-`vercel.json` schedules `/api/cron/tick` three times daily. Each tick sweeps the portfolio, evaluates every
-site against the 12-hour shift horizon, and posts a Slack alert for any site whose verdict is not `keep`.
-It runs whether or not anyone has the page open — the audit trail fills in overnight.
+`vercel.json` schedules `/api/cron/tick` daily at 11:00 UTC (04:00 PT) — ahead of the morning shift, inside
+the API's 12-hour forecast horizon. Each tick sweeps the portfolio, evaluates every site against that shift
+window, and posts a Slack alert for any site whose verdict is not `keep`. It runs whether or not anyone has
+the page open — the audit trail fills in overnight.
+
+*(A Hobby-plan Vercel account is limited to one cron firing per day; the tick is designed to be idempotent
+and cache-first, so a Pro account can raise it to every few hours by editing `vercel.json` alone.)*
 
 ---
 

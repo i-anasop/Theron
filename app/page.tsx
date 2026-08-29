@@ -123,7 +123,7 @@ export default function Page() {
         </div>
         <div className="livechip">
           <span className="dot live" />
-          Cron sweep · 04:00 / 10:00 / 16:00
+          Autonomous sweep · daily 04:00 PT
         </div>
       </header>
 

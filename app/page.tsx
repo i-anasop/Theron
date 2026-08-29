@@ -1,524 +1,212 @@
-"use client";
+import Link from "next/link";
+import Image from "next/image";
+import { sweep } from "@/lib/monitor";
+import { BASELINES } from "@/lib/baselines";
+import { appCache } from "@/lib/cache-factory";
+import { DEMO_DATE } from "@/lib/demo";
+import HeatChart from "@/components/HeatChart";
 
-import { useEffect, useMemo, useState } from "react";
-import { DEMO_DATE, DEMO_GOALS } from "@/lib/demo";
-import type { Counterfactual } from "@/lib/analysis/counterfactual";
-import type { HourReading } from "@/lib/analysis/hourly";
-import type { CallRecord } from "@/lib/fortyguard/client";
+/**
+ * The landing page runs a real sweep against the bundled response cache. The
+ * numbers below are computed at build time from verbatim API responses — not
+ * copy typed into the markup — so the headline can never drift away from what
+ * the system actually produces.
+ */
+export const revalidate = 3600;
 
-/* ────────────────────────────── types ────────────────────────────── */
+export default async function Home() {
+  const result = await sweep({
+    date: DEMO_DATE,
+    baselines: BASELINES,
+    cache: appCache(),
+    offline: true,
+    allowance: 400_000,
+  });
 
-interface Assessment {
-  site: {
-    id: string;
-    name: string;
-    operator: string;
-    city: string;
-    state: string;
-    crewSize: number;
-    shift: { start: string; end: string };
-    work: string;
-  };
-  counterfactual: Counterfactual | null;
-  triage?: {
-    shiftPeakF: number;
-    shiftMeanF: number;
-    humidityPct: number;
-    screeningHeatIndexF: number;
-    risk: string;
-    needsDeepAnalysis: boolean;
-  };
-  baselineSummary?: string;
-  error?: string;
-}
+  const lead = result.assessments.find((a) => a.counterfactual?.verdict === "reschedule");
+  const cf = lead?.counterfactual;
+  const crew = result.assessments.reduce((n, a) => n + a.site.crewSize, 0);
 
-interface SweepResponse {
-  date: string;
-  creditsSpent: number;
-  apiCalls: number;
-  cacheHits: number;
-  trail: CallRecord[];
-  assessments: Assessment[];
-}
-
-interface AgentResponse {
-  answer: string;
-  trail: CallRecord[];
-  toolCalls: Array<{ name: string; input: unknown; ok: boolean }>;
-  creditsSpent: number;
-  iterations: number;
-  provider: string;
-  model: string;
-  error?: string;
-}
-
-/* ───────────────────────────── heat chart ─────────────────────────── */
-
-const OSHA_HIGH = 90;
-const Y_MIN = 70;
-const Y_MAX = 118;
-const W = 320;
-const H = 96;
-
-const RISK_COLOR: Record<string, string> = {
-  safe: "var(--safe)",
-  caution: "var(--caution)",
-  high: "var(--high)",
-  extreme: "var(--extreme)",
-};
-
-function HeatChart({
-  hours,
-  shiftStart,
-  shiftEnd,
-  proposedStart,
-  proposedEnd,
-  id,
-}: {
-  hours: HourReading[];
-  shiftStart: number;
-  shiftEnd: number;
-  proposedStart?: number;
-  proposedEnd?: number;
-  id: string;
-}) {
-  const pts = useMemo(() => {
-    if (!hours.length) return [];
-    const span = Math.max(1, hours.length - 1);
-    return hours.map((h, i) => ({
-      x: (i / span) * W,
-      y: H - ((Math.min(Y_MAX, Math.max(Y_MIN, h.heatIndexF)) - Y_MIN) / (Y_MAX - Y_MIN)) * H,
-      h,
-    }));
-  }, [hours]);
-
-  if (!pts.length) return null;
-
-  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
-  const area = `${line} L${W},${H} L0,${H} Z`;
-  const thresholdY = H - ((OSHA_HIGH - Y_MIN) / (Y_MAX - Y_MIN)) * H;
-
-  // Hour index → x position, for the shift bands.
-  const first = hours[0].hourIndex;
-  const last = hours[hours.length - 1].hourIndex;
-  const bandX = (hour: number) => ((hour - first) / Math.max(1, last - first)) * W;
+  const hours = cf
+    ? [...cf.current.hours, ...cf.proposed.hours]
+        .filter((h, i, arr) => arr.findIndex((x) => x.hourIndex === h.hourIndex) === i)
+        .sort((a, b) => a.hourIndex - b.hourIndex)
+    : [];
 
   return (
-    <div className="chart">
-      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
-           aria-label="Hourly heat index across the day">
-        <defs>
-          <linearGradient id={`fill-${id}`} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--extreme)" stopOpacity="0.34" />
-            <stop offset="55%" stopColor="var(--high)" stopOpacity="0.13" />
-            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02" />
-          </linearGradient>
-        </defs>
-
-        {/* proposed window, drawn behind everything */}
-        {proposedStart !== undefined && proposedEnd !== undefined && (
-          <rect
-            x={bandX(proposedStart)} y={0}
-            width={Math.max(0, bandX(proposedEnd) - bandX(proposedStart))} height={H}
-            fill="var(--safe)" opacity="0.11"
-          />
-        )}
-
-        {/* currently scheduled shift */}
-        <rect
-          x={bandX(shiftStart)} y={0}
-          width={Math.max(0, bandX(shiftEnd) - bandX(shiftStart))} height={H}
-          fill="var(--accent)" opacity="0.07"
-        />
-
-        {/* OSHA high-heat trigger */}
-        <line
-          x1="0" y1={thresholdY} x2={W} y2={thresholdY}
-          stroke="var(--extreme)" strokeWidth="1" strokeDasharray="3 3"
-          opacity="0.5" vectorEffect="non-scaling-stroke"
-        />
-
-        <path d={area} fill={`url(#fill-${id})`} />
-        <path
-          d={line} fill="none" stroke="var(--high)" strokeWidth="1.6"
-          strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"
-        />
-
-        {pts.map((p) => (
-          <circle
-            key={p.h.hourIndex} cx={p.x} cy={p.y} r="2"
-            fill={RISK_COLOR[p.h.risk] ?? "var(--text-3)"}
-            vectorEffect="non-scaling-stroke"
-          >
-            <title>
-              {p.h.hour} — {p.h.tempF}°F, {p.h.humidityPct}% RH → heat index {p.h.heatIndexF}°F ({p.h.risk})
-            </title>
-          </circle>
-        ))}
-      </svg>
-
-      <div className="chart-legend">
-        <span><i className="dotm" style={{ background: "var(--accent)", opacity: .5 }} /> scheduled</span>
-        {proposedStart !== undefined && (
-          <span><i className="dotm" style={{ background: "var(--safe)", opacity: .6 }} /> proposed</span>
-        )}
-        <span style={{ color: "var(--extreme)" }}>┄ OSHA high-heat trigger (90°F)</span>
-      </div>
-    </div>
-  );
-}
-
-/* ────────────────────────────── page ─────────────────────────────── */
-
-export default function Page() {
-  const [sweep, setSweep] = useState<SweepResponse | null>(null);
-  const [sweeping, setSweeping] = useState(true);
-  const [goal, setGoal] = useState(DEMO_GOALS[0]);
-  const [agent, setAgent] = useState<AgentResponse | null>(null);
-  const [thinking, setThinking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function runSweep() {
-    setSweeping(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/sweep", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ date: DEMO_DATE }),
-      });
-      if (!res.ok) throw new Error(`sweep returned ${res.status}`);
-      setSweep(await res.json());
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setSweeping(false);
-    }
-  }
-
-  async function askAgent() {
-    setThinking(true);
-    setError(null);
-    setAgent(null);
-    try {
-      const res = await fetch("/api/agent", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal }),
-      });
-      const data = (await res.json()) as AgentResponse;
-      if (!res.ok) throw new Error(data.error ?? `agent returned ${res.status}`);
-      setAgent(data);
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setThinking(false);
-    }
-  }
-
-  useEffect(() => {
-    void runSweep();
-  }, []);
-
-  const headline = sweep?.assessments.find((a) => a.counterfactual?.verdict === "reschedule")?.counterfactual;
-  const totals = sweep && {
-    crew: sweep.assessments.reduce((n, a) => n + a.site.crewSize, 0),
-    flagged: sweep.assessments.filter(
-      (a) => (a.counterfactual && a.counterfactual.verdict !== "keep") || a.triage?.needsDeepAnalysis,
-    ).length,
-  };
-
-  return (
-    <div className="shell">
-      <header className="topbar">
-        <div className="mark">
-          <div className="glyph">T</div>
-          <div className="wordmark">
-            Theron
-            <small>Heat Safety Operations Agent</small>
-          </div>
-        </div>
-        <div className="status">
-          <span className="beacon" />
-          Autonomous sweep · daily 04:00 PT
-        </div>
-      </header>
-
-      <div className="hero">
+    <>
+      <div className="wrap hero">
+        <div className="eyebrow">FortyGuard Hackathon &rsquo;26 · Track 06 Agentic AI</div>
         <h1>
           It doesn&rsquo;t recommend a shift change. It <em>proves</em> one.
         </h1>
-        <p>
-          Theron watches a portfolio of U.S. worksites with no human in the loop. It plans its own Temperature
-          API calls, ranks today against each site&rsquo;s own multi-year history, then queries the alternative
-          hours and reports the measured difference &mdash; with every call it made shown below.
+        <p className="lede">
+          Theron is an autonomous agent that watches outdoor worksites for dangerous heat. When a crew&rsquo;s
+          shift is unsafe it doesn&rsquo;t just warn you &mdash; it tests every other window in the day, finds
+          the safest one, and reports the measured difference. Every figure traces back to an API call you can
+          inspect.
         </p>
+        <div className="hero-actions">
+          <Link href="/console" className="btn">
+            Open the live console
+          </Link>
+          <Link href="/method" className="btn ghost">
+            How it works
+          </Link>
+        </div>
+      </div>
 
-        <div className="kpis">
-          <div className="kpi accent">
+      <div className="wrap">
+        <div className="stats">
+          <div className="stat lead">
             <span className="label">Exposure avoided</span>
             <div className="v">
-              {headline ? `${headline.percentReduction}` : "—"}
+              {cf?.percentReduction ?? "—"}
               <small>%</small>
             </div>
-            <div className="foot">
-              {headline ? `${headline.degreeHoursAvoided} °F·h below the OSHA trigger` : "awaiting sweep"}
-            </div>
+            <div className="foot">by moving one shift at one site</div>
           </div>
-          <div className="kpi">
+          <div className="stat">
             <span className="label">Crew hours removed</span>
-            <div className="v">{headline ? headline.crewDegreeHoursAvoided.toLocaleString() : "—"}</div>
-            <div className="foot">crew-°F·h across the affected crew</div>
+            <div className="v">{cf ? cf.crewDegreeHoursAvoided.toLocaleString() : "—"}</div>
+            <div className="foot">crew-degree-hours above the OSHA trigger</div>
           </div>
-          <div className="kpi">
-            <span className="label">Workers monitored</span>
-            <div className="v">{totals ? totals.crew : "—"}</div>
-            <div className="foot">{totals ? `${totals.flagged} sites flagged today` : "across the portfolio"}</div>
+          <div className="stat">
+            <span className="label">Workers covered</span>
+            <div className="v">{crew}</div>
+            <div className="foot">across {result.assessments.length} monitored worksites</div>
           </div>
-          <div className="kpi">
-            <span className="label">Credits this run</span>
-            <div className="v">{sweep ? sweep.creditsSpent.toLocaleString() : "—"}</div>
-            <div className="foot">
-              {sweep ? `${sweep.cacheHits}/${sweep.apiCalls} calls served from cache` : "cache-first by design"}
-            </div>
+          <div className="stat">
+            <span className="label">Credits to run this</span>
+            <div className="v">{result.creditsSpent}</div>
+            <div className="foot">{result.trail.length} calls, every one served from cache</div>
           </div>
         </div>
       </div>
 
-      {error && <div className="err">{error}</div>}
-
-      <section>
-        <div className="sec-head">
-          <div>
-            <h2>Worksite portfolio</h2>
-            <p>{sweep ? `${sweep.date} · ${sweep.assessments.length} sites assessed` : "loading…"}</p>
-          </div>
-          <button className="btn quiet" onClick={runSweep} disabled={sweeping}>
-            {sweeping ? "Sweeping…" : "Run sweep"}
-          </button>
+      {/* ── the thesis ── */}
+      <section className="wrap">
+        <div className="sec-head narrow">
+          <div className="eyebrow">The insight</div>
+          <h2>Twelve hours is not a short forecast. It is exactly one work shift.</h2>
+          <p>
+            The Temperature API forecasts twelve hours ahead. Read as weather, that&rsquo;s a limitation. Read
+            as operations, it is precisely the planning horizon a safety manager works in &mdash; the next
+            shift, the one they can still change. Theron is built for that horizon rather than apologising for
+            it.
+          </p>
         </div>
 
-        <div className="sites">
-          {(sweep?.assessments ?? []).map((a) => {
-            const cf = a.counterfactual;
-            const verdict = cf?.verdict ?? (a.triage ? "screened" : "unknown");
-            const shiftStart = Number(a.site.shift.start.slice(0, 2));
-            const shiftEnd = Number(a.site.shift.end.slice(0, 2));
-
-            const allHours = cf
-              ? [...cf.current.hours, ...cf.proposed.hours]
-                  .filter((h, i, arr) => arr.findIndex((x) => x.hourIndex === h.hourIndex) === i)
-                  .sort((x, y) => x.hourIndex - y.hourIndex)
-              : [];
-
-            return (
-              <article key={a.site.id} className="site">
-                <div className="site-top">
-                  <div>
-                    <h3>{a.site.name}</h3>
-                    <div className="sub">
-                      {a.site.city}, {a.site.state} · {a.site.crewSize} crew · shift {a.site.shift.start}&ndash;
-                      {a.site.shift.end}
-                    </div>
-                  </div>
-                  <span className={`tag ${verdict}`}>{verdict.replace("_", " ")}</span>
+        {cf && (
+          <div className="card" style={{ padding: 24 }}>
+            <div className="sec-row" style={{ marginBottom: 18 }}>
+              <div>
+                <div className="label">{lead!.site.name} · {lead!.site.city}, {lead!.site.state}</div>
+                <p style={{ margin: "8px 0 0", fontSize: "1.02rem", fontWeight: 600, letterSpacing: "-.02em" }}>
+                  {cf.current.label} &rarr; {cf.proposed.label}
+                </p>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div className="label">Peak heat index</div>
+                <div className="num" style={{ fontSize: "1.5rem", fontWeight: 660, color: "var(--high)" }}>
+                  {cf.current.peakHeatIndexF}&deg;F
                 </div>
+              </div>
+            </div>
 
-                <div className="site-body">
-                  {a.error && <p className="verdict-line">{a.error}</p>}
-
-                  {cf && (
-                    <>
-                      <p className="verdict-line">{cf.headline}</p>
-
-                      <HeatChart
-                        id={a.site.id}
-                        hours={allHours}
-                        shiftStart={shiftStart}
-                        shiftEnd={shiftEnd}
-                        proposedStart={cf.verdict === "reschedule" ? cf.proposed.startHour : undefined}
-                        proposedEnd={cf.verdict === "reschedule" ? cf.proposed.endHour : undefined}
-                      />
-
-                      <div className="metrics">
-                        <div className="metric">
-                          <span className="label">Peak heat idx</span>
-                          <div className="m warn">{cf.current.peakHeatIndexF}&deg;F</div>
-                        </div>
-                        <div className="metric">
-                          <span className="label">Exposure now</span>
-                          <div className="m">{cf.current.degreeHoursOverTrigger}</div>
-                        </div>
-                        <div className="metric">
-                          <span className="label">If moved</span>
-                          <div className={`m ${cf.degreeHoursAvoided > 0 ? "down" : ""}`}>
-                            {cf.proposed.degreeHoursOverTrigger}
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {!cf && a.triage && (
-                    <>
-                      <p className="verdict-line">
-                        Screened with <b>2 API calls instead of 24</b>. Shift peak {a.triage.shiftPeakF}&deg;F at{" "}
-                        {a.triage.humidityPct}% humidity &mdash; classified <b>{a.triage.risk}</b>.{" "}
-                        {a.triage.needsDeepAnalysis
-                          ? "Flagged for full hourly analysis."
-                          : "No further spend warranted."}
-                      </p>
-                      <div className="metrics">
-                        <div className="metric">
-                          <span className="label">Shift peak</span>
-                          <div className="m warn">{a.triage.shiftPeakF}&deg;F</div>
-                        </div>
-                        <div className="metric">
-                          <span className="label">Humidity</span>
-                          <div className="m">{a.triage.humidityPct}%</div>
-                        </div>
-                        <div className="metric">
-                          <span className="label">Screening idx</span>
-                          <div className="m">~{a.triage.screeningHeatIndexF}&deg;F</div>
-                        </div>
-                      </div>
-                      <div className="baseline-note">
-                        Screening estimate only &mdash; the shift mean temperature against the worst hourly
-                        humidity. Used to decide whether to buy the hourly curve, never quoted as a measurement.
-                      </div>
-                    </>
-                  )}
-
-                  {a.baselineSummary && <div className="baseline-note">{a.baselineSummary}</div>}
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section>
-        <div className="sec-head">
-          <div>
-            <h2>Agent console</h2>
-            <p>Plain-language goal → the agent plans its own calls → a decision with citations</p>
-          </div>
-        </div>
-
-        <div className="console">
-          <div className="prompt-row">
-            <input
-              type="text"
-              value={goal}
-              onChange={(e) => setGoal(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !thinking && askAgent()}
-              placeholder="Ask Theron a question…"
-              aria-label="Goal for the agent"
+            <HeatChart
+              id="hero"
+              hours={hours}
+              shiftStart={cf.current.startHour}
+              shiftEnd={cf.current.endHour}
+              proposedStart={cf.proposed.startHour}
+              proposedEnd={cf.proposed.endHour}
+              height={170}
             />
-            <button className="btn" onClick={askAgent} disabled={thinking || !goal.trim()}>
-              {thinking ? "Working…" : "Run agent"}
-            </button>
+
+            <p className="verdict" style={{ marginTop: 18 }}>
+              {cf.headline}
+            </p>
           </div>
-
-          <div className="suggestions">
-            {DEMO_GOALS.map((g) => (
-              <button key={g} className="sugg" onClick={() => setGoal(g)}>
-                {g}
-              </button>
-            ))}
-          </div>
-
-          <div className="console-out">
-            {thinking && <div className="working">planning · selecting endpoints · checking budget…</div>}
-
-            {!thinking && !agent && (
-              <p className="placeholder">
-                Ask a question, or pick one above. The agent decides which endpoints to call and how much to
-                spend — then shows you both.
-              </p>
-            )}
-
-            {agent && (
-              <>
-                <div className="trace">
-                  {agent.toolCalls.map((t, i) => (
-                    <div className="trace-row" key={i}>
-                      <span className="idx">{String(i + 1).padStart(2, "0")}</span>
-                      <span>{t.name}</span>
-                      {JSON.stringify(t.input) !== "{}" && (
-                        <span className="args">{JSON.stringify(t.input)}</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-                <p className="answer">{agent.answer}</p>
-                <div className="runbar">
-                  <span>
-                    <b>{agent.toolCalls.length}</b> tool calls
-                  </span>
-                  <span>
-                    <b>{agent.iterations}</b> iterations
-                  </span>
-                  <span>
-                    <b>{agent.creditsSpent.toLocaleString()}</b> credits
-                  </span>
-                  <span>
-                    reasoning <b>{agent.model}</b>
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-        </div>
+        )}
       </section>
 
-      <section>
+      {/* ── how it works ── */}
+      <section className="wrap">
         <div className="sec-head">
-          <div>
-            <h2>Audit trail</h2>
-            <p>Every Temperature API call behind the numbers above</p>
-          </div>
+          <div className="eyebrow">How it works</div>
+          <h2>Tools return facts. The model returns prose.</h2>
+          <p>
+            Theron&rsquo;s language model chooses what to ask and how to explain it. It never computes a
+            number, cites a regulation, or invents a control measure &mdash; those constraints live in the tool
+            layer, not in a prompt asking nicely.
+          </p>
         </div>
 
-        <div className="callout">
-          Nothing here is asserted without a call behind it. Cached rows cost nothing — the same polygon and
-          hour always returns the same answer, so Theron never pays twice for a question it has already asked.
-        </div>
-
-        <div className="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Source</th>
-                <th>Endpoint</th>
-                <th>Credits</th>
-                <th>Latency</th>
-                <th>Activity ID</th>
-                <th>Purpose</th>
-              </tr>
-            </thead>
-            <tbody>
-              {((agent?.trail ?? sweep?.trail ?? []) as CallRecord[]).slice(0, 30).map((c, i) => (
-                <tr key={i}>
-                  <td>
-                    <span className={`chip ${c.cached ? "cache" : "live"}`}>{c.cached ? "cache" : "live"}</span>
-                  </td>
-                  <td className="m">{c.endpoint}</td>
-                  <td className="m">{c.credits.toLocaleString()}</td>
-                  <td className="m">{c.durationMs} ms</td>
-                  <td className="m">{c.activityId ? c.activityId.slice(0, 8) : "—"}</td>
-                  <td className="note">{c.note ?? ""}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="grid-3">
+          {[
+            {
+              n: "01",
+              h: "It plans, then spends",
+              p: "The agent checks its credit budget before choosing endpoints, and the budget refuses a call before it happens rather than after. Analysis costs real money; Theron treats that as a design constraint.",
+            },
+            {
+              n: "02",
+              h: "It compares like with like",
+              p: "A 104°F day means something different in Phoenix than in Seattle, because crews acclimatise. Theron ranks today against the same site's own sampled history since 2022, not an absolute threshold.",
+            },
+            {
+              n: "03",
+              h: "It verifies before advising",
+              p: "To claim a shift move helps, Theron queries the alternative hours and measures the difference in degree-hours above the trigger. A recommendation without that behind it never leaves the system.",
+            },
+            {
+              n: "04",
+              h: "It refuses when it should",
+              p: "When every hour of a day sits above the trigger, no reschedule is safe. Theron returns a stand-down verdict and says so, instead of manufacturing a recommendation to look useful.",
+            },
+            {
+              n: "05",
+              h: "It screens before it drills",
+              p: "A full hourly curve costs 24 API calls. Triage screens a site with 2. Only sites that triage flags get the expensive analysis — a 92% reduction in the cost of watching a portfolio.",
+            },
+            {
+              n: "06",
+              h: "It shows its work",
+              p: "Every call, its cost, its latency and its activity ID are rendered on the page. You are never asked to trust the output; you are shown how to check it.",
+            },
+          ].map((f) => (
+            <div key={f.n} className="card feature">
+              <div className="n">{f.n}</div>
+              <h3>{f.h}</h3>
+              <p>{f.p}</p>
+            </div>
+          ))}
         </div>
       </section>
 
-      <footer>
-        <span>Theron · FortyGuard Hackathon &rsquo;26 · Track 06 Agentic AI</span>
-        <span>OSHA thresholds reference a proposed rule, not settled law</span>
-      </footer>
-    </div>
+      {/* ── closing ── */}
+      <section className="wrap">
+        <div
+          className="card"
+          style={{ padding: "34px 30px", display: "flex", gap: 26, alignItems: "center", flexWrap: "wrap" }}
+        >
+          <Image src="/logo.png" alt="" width={72} height={72} style={{ borderRadius: 14, flex: "none" }} />
+          <div style={{ flex: 1, minWidth: 260 }}>
+            <h2 style={{ margin: 0, fontSize: "1.3rem", fontWeight: 650, letterSpacing: "-.028em" }}>
+              Why an alpaca?
+            </h2>
+            <p style={{ margin: "10px 0 0", color: "var(--ink-2)", fontSize: ".95rem", maxWidth: "56ch" }}>
+              Alpacas are among the most heat-vulnerable animals people work with &mdash; they carry their own
+              insulation and cannot shed it, so keepers watch the thermometer on their behalf and move them out
+              of the sun before it is too late. That is exactly this job.
+            </p>
+          </div>
+          <Link href="/console" className="btn" style={{ flex: "none" }}>
+            See it run
+          </Link>
+        </div>
+      </section>
+    </>
   );
 }

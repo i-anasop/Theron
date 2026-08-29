@@ -1,0 +1,25 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# secrets — never commit the API key
+.env
+.env.local
+.env*.local
+
+# next
+.next/
+out/
+build/
+next-env.d.ts
+
+# cache: API responses are content-addressed and rebuildable
+.cache/
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+.vercel
+*.tsbuildinfo

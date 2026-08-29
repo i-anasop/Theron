@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { DEMO_DATE, DEMO_GOALS } from "@/lib/demo";
 import type { Counterfactual } from "@/lib/analysis/counterfactual";
+import type { HourReading } from "@/lib/analysis/hourly";
 import type { CallRecord } from "@/lib/fortyguard/client";
+
+/* ────────────────────────────── types ────────────────────────────── */
 
 interface Assessment {
   site: {
@@ -24,15 +27,12 @@ interface Assessment {
     screeningHeatIndexF: number;
     risk: string;
     needsDeepAnalysis: boolean;
-    guidance: string;
   };
   baselineSummary?: string;
-  percentile?: number;
   error?: string;
 }
 
 interface SweepResponse {
-  ranAt: string;
   date: string;
   creditsSpent: number;
   apiCalls: number;
@@ -52,9 +52,127 @@ interface AgentResponse {
   error?: string;
 }
 
+/* ───────────────────────────── heat chart ─────────────────────────── */
+
+const OSHA_HIGH = 90;
+const Y_MIN = 70;
+const Y_MAX = 118;
+const W = 320;
+const H = 96;
+
+const RISK_COLOR: Record<string, string> = {
+  safe: "var(--safe)",
+  caution: "var(--caution)",
+  high: "var(--high)",
+  extreme: "var(--extreme)",
+};
+
+function HeatChart({
+  hours,
+  shiftStart,
+  shiftEnd,
+  proposedStart,
+  proposedEnd,
+  id,
+}: {
+  hours: HourReading[];
+  shiftStart: number;
+  shiftEnd: number;
+  proposedStart?: number;
+  proposedEnd?: number;
+  id: string;
+}) {
+  const pts = useMemo(() => {
+    if (!hours.length) return [];
+    const span = Math.max(1, hours.length - 1);
+    return hours.map((h, i) => ({
+      x: (i / span) * W,
+      y: H - ((Math.min(Y_MAX, Math.max(Y_MIN, h.heatIndexF)) - Y_MIN) / (Y_MAX - Y_MIN)) * H,
+      h,
+    }));
+  }, [hours]);
+
+  if (!pts.length) return null;
+
+  const line = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+  const area = `${line} L${W},${H} L0,${H} Z`;
+  const thresholdY = H - ((OSHA_HIGH - Y_MIN) / (Y_MAX - Y_MIN)) * H;
+
+  // Hour index → x position, for the shift bands.
+  const first = hours[0].hourIndex;
+  const last = hours[hours.length - 1].hourIndex;
+  const bandX = (hour: number) => ((hour - first) / Math.max(1, last - first)) * W;
+
+  return (
+    <div className="chart">
+      <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
+           aria-label="Hourly heat index across the day">
+        <defs>
+          <linearGradient id={`fill-${id}`} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--extreme)" stopOpacity="0.34" />
+            <stop offset="55%" stopColor="var(--high)" stopOpacity="0.13" />
+            <stop offset="100%" stopColor="var(--accent)" stopOpacity="0.02" />
+          </linearGradient>
+        </defs>
+
+        {/* proposed window, drawn behind everything */}
+        {proposedStart !== undefined && proposedEnd !== undefined && (
+          <rect
+            x={bandX(proposedStart)} y={0}
+            width={Math.max(0, bandX(proposedEnd) - bandX(proposedStart))} height={H}
+            fill="var(--safe)" opacity="0.11"
+          />
+        )}
+
+        {/* currently scheduled shift */}
+        <rect
+          x={bandX(shiftStart)} y={0}
+          width={Math.max(0, bandX(shiftEnd) - bandX(shiftStart))} height={H}
+          fill="var(--accent)" opacity="0.07"
+        />
+
+        {/* OSHA high-heat trigger */}
+        <line
+          x1="0" y1={thresholdY} x2={W} y2={thresholdY}
+          stroke="var(--extreme)" strokeWidth="1" strokeDasharray="3 3"
+          opacity="0.5" vectorEffect="non-scaling-stroke"
+        />
+
+        <path d={area} fill={`url(#fill-${id})`} />
+        <path
+          d={line} fill="none" stroke="var(--high)" strokeWidth="1.6"
+          strokeLinejoin="round" strokeLinecap="round" vectorEffect="non-scaling-stroke"
+        />
+
+        {pts.map((p) => (
+          <circle
+            key={p.h.hourIndex} cx={p.x} cy={p.y} r="2"
+            fill={RISK_COLOR[p.h.risk] ?? "var(--text-3)"}
+            vectorEffect="non-scaling-stroke"
+          >
+            <title>
+              {p.h.hour} — {p.h.tempF}°F, {p.h.humidityPct}% RH → heat index {p.h.heatIndexF}°F ({p.h.risk})
+            </title>
+          </circle>
+        ))}
+      </svg>
+
+      <div className="chart-legend">
+        <span><i className="dotm" style={{ background: "var(--accent)", opacity: .5 }} /> scheduled</span>
+        {proposedStart !== undefined && (
+          <span><i className="dotm" style={{ background: "var(--safe)", opacity: .6 }} /> proposed</span>
+        )}
+        <span style={{ color: "var(--extreme)" }}>┄ OSHA high-heat trigger (90°F)</span>
+      </div>
+    </div>
+  );
+}
+
+/* ────────────────────────────── page ─────────────────────────────── */
+
 export default function Page() {
   const [sweep, setSweep] = useState<SweepResponse | null>(null);
-  const [sweeping, setSweeping] = useState(false);
+  const [sweeping, setSweeping] = useState(true);
   const [goal, setGoal] = useState(DEMO_GOALS[0]);
   const [agent, setAgent] = useState<AgentResponse | null>(null);
   const [thinking, setThinking] = useState(false);
@@ -69,10 +187,10 @@ export default function Page() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ date: DEMO_DATE }),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(`sweep returned ${res.status}`);
       setSweep(await res.json());
     } catch (e) {
-      setError(`Sweep failed: ${(e as Error).message}`);
+      setError((e as Error).message);
     } finally {
       setSweeping(false);
     }
@@ -89,10 +207,10 @@ export default function Page() {
         body: JSON.stringify({ goal }),
       });
       const data = (await res.json()) as AgentResponse;
-      if (!res.ok) throw new Error(data.error ?? "Agent failed");
+      if (!res.ok) throw new Error(data.error ?? `agent returned ${res.status}`);
       setAgent(data);
     } catch (e) {
-      setError(`Agent failed: ${(e as Error).message}`);
+      setError((e as Error).message);
     } finally {
       setThinking(false);
     }
@@ -102,238 +220,239 @@ export default function Page() {
     void runSweep();
   }, []);
 
-  const totals = sweep
-    ? {
-        crew: sweep.assessments.reduce((n, a) => n + a.site.crewSize, 0),
-        needing: sweep.assessments.filter((a) => a.counterfactual && a.counterfactual.verdict !== "keep").length,
-        avoided: sweep.assessments.reduce((n, a) => n + (a.counterfactual?.crewDegreeHoursAvoided ?? 0), 0),
-      }
-    : null;
+  const headline = sweep?.assessments.find((a) => a.counterfactual?.verdict === "reschedule")?.counterfactual;
+  const totals = sweep && {
+    crew: sweep.assessments.reduce((n, a) => n + a.site.crewSize, 0),
+    flagged: sweep.assessments.filter(
+      (a) => (a.counterfactual && a.counterfactual.verdict !== "keep") || a.triage?.needsDeepAnalysis,
+    ).length,
+  };
 
   return (
     <div className="shell">
-      <header className="masthead">
-        <div className="brand">
-          <div className="eyebrow">FortyGuard Temperature API · Track 06 Agentic AI</div>
-          <h1>Theron</h1>
-          <p className="tagline">
-            An autonomous heat-safety agent for outdoor workforces. It plans its own API calls, ranks today
-            against each site&rsquo;s own history, and proves a shift change before recommending one.
-          </p>
+      <header className="topbar">
+        <div className="mark">
+          <div className="glyph">T</div>
+          <div className="wordmark">
+            Theron
+            <small>Heat Safety Operations Agent</small>
+          </div>
         </div>
-        <div className="livechip">
-          <span className="dot live" />
+        <div className="status">
+          <span className="beacon" />
           Autonomous sweep · daily 04:00 PT
         </div>
       </header>
 
+      <div className="hero">
+        <h1>
+          It doesn&rsquo;t recommend a shift change. It <em>proves</em> one.
+        </h1>
+        <p>
+          Theron watches a portfolio of U.S. worksites with no human in the loop. It plans its own Temperature
+          API calls, ranks today against each site&rsquo;s own multi-year history, then queries the alternative
+          hours and reports the measured difference &mdash; with every call it made shown below.
+        </p>
+
+        <div className="kpis">
+          <div className="kpi accent">
+            <span className="label">Exposure avoided</span>
+            <div className="v">
+              {headline ? `${headline.percentReduction}` : "—"}
+              <small>%</small>
+            </div>
+            <div className="foot">
+              {headline ? `${headline.degreeHoursAvoided} °F·h below the OSHA trigger` : "awaiting sweep"}
+            </div>
+          </div>
+          <div className="kpi">
+            <span className="label">Crew hours removed</span>
+            <div className="v">{headline ? headline.crewDegreeHoursAvoided.toLocaleString() : "—"}</div>
+            <div className="foot">crew-°F·h across the affected crew</div>
+          </div>
+          <div className="kpi">
+            <span className="label">Workers monitored</span>
+            <div className="v">{totals ? totals.crew : "—"}</div>
+            <div className="foot">{totals ? `${totals.flagged} sites flagged today` : "across the portfolio"}</div>
+          </div>
+          <div className="kpi">
+            <span className="label">Credits this run</span>
+            <div className="v">{sweep ? sweep.creditsSpent.toLocaleString() : "—"}</div>
+            <div className="foot">
+              {sweep ? `${sweep.cacheHits}/${sweep.apiCalls} calls served from cache` : "cache-first by design"}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {error && <div className="err">{error}</div>}
 
       <section>
-        <h2>
-          Portfolio <span className="sub">{sweep ? `${sweep.date} · ${sweep.assessments.length} sites` : "loading"}</span>
-        </h2>
-
-        {totals && (
-          <div className="summary-row">
-            <span>
-              <b>{totals.crew}</b> workers monitored
-            </span>
-            <span>
-              <b>{totals.needing}</b> sites needing intervention
-            </span>
-            <span>
-              <b>{totals.avoided.toLocaleString()}</b> crew-°F·h avoidable today
-            </span>
-            <span>
-              <b>{sweep!.creditsSpent.toLocaleString()}</b> credits spent ·{" "}
-              <b>{sweep!.cacheHits}</b>/{sweep!.apiCalls} from cache
-            </span>
+        <div className="sec-head">
+          <div>
+            <h2>Worksite portfolio</h2>
+            <p>{sweep ? `${sweep.date} · ${sweep.assessments.length} sites assessed` : "loading…"}</p>
           </div>
-        )}
+          <button className="btn quiet" onClick={runSweep} disabled={sweeping}>
+            {sweeping ? "Sweeping…" : "Run sweep"}
+          </button>
+        </div>
 
-        <div className="grid">
+        <div className="sites">
           {(sweep?.assessments ?? []).map((a) => {
             const cf = a.counterfactual;
             const verdict = cf?.verdict ?? (a.triage ? "screened" : "unknown");
             const shiftStart = Number(a.site.shift.start.slice(0, 2));
             const shiftEnd = Number(a.site.shift.end.slice(0, 2));
 
+            const allHours = cf
+              ? [...cf.current.hours, ...cf.proposed.hours]
+                  .filter((h, i, arr) => arr.findIndex((x) => x.hourIndex === h.hourIndex) === i)
+                  .sort((x, y) => x.hourIndex - y.hourIndex)
+              : [];
+
             return (
-              <article key={a.site.id} className={`card ${verdict}`}>
-                <div className="card-head">
+              <article key={a.site.id} className="site">
+                <div className="site-top">
                   <div>
                     <h3>{a.site.name}</h3>
-                    <div className="meta">
-                      {a.site.city}, {a.site.state} · {a.site.operator} · {a.site.crewSize} crew ·{" "}
-                      {a.site.shift.start}&ndash;{a.site.shift.end}
+                    <div className="sub">
+                      {a.site.city}, {a.site.state} · {a.site.crewSize} crew · shift {a.site.shift.start}&ndash;
+                      {a.site.shift.end}
                     </div>
                   </div>
-                  <span className={`verdict ${verdict}`}>{verdict.replace("_", " ")}</span>
+                  <span className={`tag ${verdict}`}>{verdict.replace("_", " ")}</span>
                 </div>
 
-                {a.error && <p className="headline">{a.error}</p>}
-                {cf && <p className="headline">{cf.headline}</p>}
+                <div className="site-body">
+                  {a.error && <p className="verdict-line">{a.error}</p>}
 
-                {!cf && a.triage && (
-                  <>
-                    <p className="headline">
-                      Screened with 2 API calls instead of 24. Shift peak {a.triage.shiftPeakF}&deg;F at{" "}
-                      {a.triage.humidityPct}% RH &mdash; classified <strong>{a.triage.risk}</strong>.{" "}
-                      {a.triage.needsDeepAnalysis
-                        ? "Flagged for the full hourly analysis."
-                        : "No further spend warranted."}
-                    </p>
-                    <dl className="stats">
-                      <div className="stat">
-                        <dt>Shift peak</dt>
-                        <dd>{a.triage.shiftPeakF}&deg;F</dd>
-                      </div>
-                      <div className="stat">
-                        <dt>Humidity</dt>
-                        <dd>{a.triage.humidityPct}%</dd>
-                      </div>
-                      <div className="stat">
-                        <dt>Screening HI</dt>
-                        <dd>~{a.triage.screeningHeatIndexF}&deg;F</dd>
-                      </div>
-                    </dl>
-                    <p className="meta">
-                      Screening estimate only &mdash; pairs the shift mean temperature with the worst hourly
-                      humidity. Used to decide whether to buy the hourly curve, never quoted as a measurement.
-                    </p>
-                  </>
-                )}
+                  {cf && (
+                    <>
+                      <p className="verdict-line">{cf.headline}</p>
 
-                {cf && (
-                  <>
-                    <div className="strip">
-                      {cf.current.hours.concat(
-                        cf.proposed.hours.filter(
-                          (h) => !cf.current.hours.some((c) => c.hourIndex === h.hourIndex),
-                        ),
-                      )
-                        .sort((x, y) => x.hourIndex - y.hourIndex)
-                        .map((h) => {
-                          const pct = Math.max(6, Math.min(100, ((h.heatIndexF - 70) / 45) * 100));
-                          const inShift = h.hourIndex >= shiftStart && h.hourIndex < shiftEnd;
-                          return (
-                            <div
-                              key={h.hourIndex}
-                              className={`hr${inShift ? " inshift" : ""}`}
-                              title={`${h.hour} — ${h.tempF}°F, ${h.humidityPct}% RH, heat index ${h.heatIndexF}°F (${h.risk})`}
-                            >
-                              <div className={`bar ${h.risk}`} style={{ height: `${pct}%` }} />
-                            </div>
-                          );
-                        })}
-                    </div>
-                    <div className="strip-axis">
-                      <span>hourly heat index</span>
-                      <span>▬ scheduled shift</span>
-                    </div>
+                      <HeatChart
+                        id={a.site.id}
+                        hours={allHours}
+                        shiftStart={shiftStart}
+                        shiftEnd={shiftEnd}
+                        proposedStart={cf.verdict === "reschedule" ? cf.proposed.startHour : undefined}
+                        proposedEnd={cf.verdict === "reschedule" ? cf.proposed.endHour : undefined}
+                      />
 
-                    <dl className="stats">
-                      <div className="stat">
-                        <dt>Peak heat index</dt>
-                        <dd>{cf.current.peakHeatIndexF}°F</dd>
+                      <div className="metrics">
+                        <div className="metric">
+                          <span className="label">Peak heat idx</span>
+                          <div className="m warn">{cf.current.peakHeatIndexF}&deg;F</div>
+                        </div>
+                        <div className="metric">
+                          <span className="label">Exposure now</span>
+                          <div className="m">{cf.current.degreeHoursOverTrigger}</div>
+                        </div>
+                        <div className="metric">
+                          <span className="label">If moved</span>
+                          <div className={`m ${cf.degreeHoursAvoided > 0 ? "down" : ""}`}>
+                            {cf.proposed.degreeHoursOverTrigger}
+                          </div>
+                        </div>
                       </div>
-                      <div className="stat">
-                        <dt>Exposure over trigger</dt>
-                        <dd>{cf.current.degreeHoursOverTrigger}</dd>
-                      </div>
-                      <div className="stat">
-                        <dt>{cf.verdict === "reschedule" ? "Avoidable" : "Best available"}</dt>
-                        <dd>
-                          {cf.verdict === "reschedule"
-                            ? `−${cf.percentReduction}%`
-                            : `${cf.proposed.degreeHoursOverTrigger}`}
-                        </dd>
-                      </div>
-                    </dl>
+                    </>
+                  )}
 
-                    {a.baselineSummary && <p className="meta">{a.baselineSummary}</p>}
-                  </>
-                )}
+                  {!cf && a.triage && (
+                    <>
+                      <p className="verdict-line">
+                        Screened with <b>2 API calls instead of 24</b>. Shift peak {a.triage.shiftPeakF}&deg;F at{" "}
+                        {a.triage.humidityPct}% humidity &mdash; classified <b>{a.triage.risk}</b>.{" "}
+                        {a.triage.needsDeepAnalysis
+                          ? "Flagged for full hourly analysis."
+                          : "No further spend warranted."}
+                      </p>
+                      <div className="metrics">
+                        <div className="metric">
+                          <span className="label">Shift peak</span>
+                          <div className="m warn">{a.triage.shiftPeakF}&deg;F</div>
+                        </div>
+                        <div className="metric">
+                          <span className="label">Humidity</span>
+                          <div className="m">{a.triage.humidityPct}%</div>
+                        </div>
+                        <div className="metric">
+                          <span className="label">Screening idx</span>
+                          <div className="m">~{a.triage.screeningHeatIndexF}&deg;F</div>
+                        </div>
+                      </div>
+                      <div className="baseline-note">
+                        Screening estimate only &mdash; the shift mean temperature against the worst hourly
+                        humidity. Used to decide whether to buy the hourly curve, never quoted as a measurement.
+                      </div>
+                    </>
+                  )}
+
+                  {a.baselineSummary && <div className="baseline-note">{a.baselineSummary}</div>}
+                </div>
               </article>
             );
           })}
         </div>
-
-        <div className="legend">
-          <span>
-            <i className="swatch" style={{ background: "var(--safe)" }} /> safe
-          </span>
-          <span>
-            <i className="swatch" style={{ background: "var(--caution)" }} /> caution — OSHA initial trigger
-          </span>
-          <span>
-            <i className="swatch" style={{ background: "var(--high)" }} /> high — OSHA high-heat trigger
-          </span>
-          <span>
-            <i className="swatch" style={{ background: "var(--extreme)" }} /> extreme
-          </span>
-        </div>
-
-        <button className="ghost" onClick={runSweep} disabled={sweeping} style={{ marginTop: 16 }}>
-          {sweeping ? "Sweeping…" : "Run sweep now"}
-        </button>
       </section>
 
       <section>
-        <h2>
-          Agent console <span className="sub">plain-language goal → planned API calls → cited decision</span>
-        </h2>
+        <div className="sec-head">
+          <div>
+            <h2>Agent console</h2>
+            <p>Plain-language goal → the agent plans its own calls → a decision with citations</p>
+          </div>
+        </div>
 
         <div className="console">
-          <div className="console-bar">
+          <div className="prompt-row">
             <input
               type="text"
               value={goal}
               onChange={(e) => setGoal(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && !thinking && askAgent()}
-              placeholder="Ask Theron something…"
+              placeholder="Ask Theron a question…"
+              aria-label="Goal for the agent"
             />
-            <button onClick={askAgent} disabled={thinking || !goal.trim()}>
+            <button className="btn" onClick={askAgent} disabled={thinking || !goal.trim()}>
               {thinking ? "Working…" : "Run agent"}
             </button>
           </div>
 
-          <div className="chips">
+          <div className="suggestions">
             {DEMO_GOALS.map((g) => (
-              <button key={g} className="chip" onClick={() => setGoal(g)}>
+              <button key={g} className="sugg" onClick={() => setGoal(g)}>
                 {g}
               </button>
             ))}
           </div>
 
-          <div className="console-body">
-            {thinking && (
-              <div className="thinking">
-                <div className="tick">planning · choosing endpoints · checking budget…</div>
-              </div>
-            )}
+          <div className="console-out">
+            {thinking && <div className="working">planning · selecting endpoints · checking budget…</div>}
 
             {!thinking && !agent && (
-              <div className="thinking">
-                <div>Ask a question, or pick one above. The agent decides which endpoints to call.</div>
-              </div>
+              <p className="placeholder">
+                Ask a question, or pick one above. The agent decides which endpoints to call and how much to
+                spend — then shows you both.
+              </p>
             )}
 
             {agent && (
               <>
-                <div className="thinking" style={{ marginBottom: 14 }}>
+                <div className="trace">
                   {agent.toolCalls.map((t, i) => (
-                    <div key={i}>
-                      <span className="tick">→</span> {t.name}
+                    <div className="trace-row" key={i}>
+                      <span className="idx">{String(i + 1).padStart(2, "0")}</span>
+                      <span>{t.name}</span>
                       {JSON.stringify(t.input) !== "{}" && (
-                        <span style={{ opacity: 0.7 }}> {JSON.stringify(t.input).slice(0, 90)}</span>
+                        <span className="args">{JSON.stringify(t.input)}</span>
                       )}
                     </div>
                   ))}
                 </div>
                 <p className="answer">{agent.answer}</p>
-                <div className="summary-row">
+                <div className="runbar">
                   <span>
                     <b>{agent.toolCalls.length}</b> tool calls
                   </span>
@@ -341,7 +460,7 @@ export default function Page() {
                     <b>{agent.iterations}</b> iterations
                   </span>
                   <span>
-                    <b>{agent.creditsSpent.toLocaleString()}</b> credits spent
+                    <b>{agent.creditsSpent.toLocaleString()}</b> credits
                   </span>
                   <span>
                     reasoning <b>{agent.model}</b>
@@ -354,15 +473,19 @@ export default function Page() {
       </section>
 
       <section>
-        <h2>
-          Audit trail <span className="sub">every API call the agent made, and what it cost</span>
-        </h2>
-        <p className="note">
+        <div className="sec-head">
+          <div>
+            <h2>Audit trail</h2>
+            <p>Every Temperature API call behind the numbers above</p>
+          </div>
+        </div>
+
+        <div className="callout">
           Nothing here is asserted without a call behind it. Cached rows cost nothing — the same polygon and
           hour always returns the same answer, so Theron never pays twice for a question it has already asked.
-        </p>
+        </div>
 
-        <div className="scroller">
+        <div className="tablewrap">
           <table>
             <thead>
               <tr>
@@ -375,16 +498,16 @@ export default function Page() {
               </tr>
             </thead>
             <tbody>
-              {((agent?.trail ?? sweep?.trail ?? []) as CallRecord[]).slice(0, 40).map((c, i) => (
+              {((agent?.trail ?? sweep?.trail ?? []) as CallRecord[]).slice(0, 30).map((c, i) => (
                 <tr key={i}>
                   <td>
-                    <span className={`pill ${c.cached ? "cache" : "live"}`}>{c.cached ? "cache" : "live"}</span>
+                    <span className={`chip ${c.cached ? "cache" : "live"}`}>{c.cached ? "cache" : "live"}</span>
                   </td>
-                  <td className="mono">{c.endpoint}</td>
-                  <td className="mono">{c.credits.toLocaleString()}</td>
-                  <td className="mono">{c.durationMs} ms</td>
-                  <td className="mono">{c.activityId ? c.activityId.slice(0, 8) : "—"}</td>
-                  <td>{c.note ?? ""}</td>
+                  <td className="m">{c.endpoint}</td>
+                  <td className="m">{c.credits.toLocaleString()}</td>
+                  <td className="m">{c.durationMs} ms</td>
+                  <td className="m">{c.activityId ? c.activityId.slice(0, 8) : "—"}</td>
+                  <td className="note">{c.note ?? ""}</td>
                 </tr>
               ))}
             </tbody>
@@ -394,7 +517,7 @@ export default function Page() {
 
       <footer>
         <span>Theron · FortyGuard Hackathon &rsquo;26 · Track 06 Agentic AI</span>
-        <span>Thresholds from OSHA&rsquo;s proposed heat standard — a proposed rule, not settled law</span>
+        <span>OSHA thresholds reference a proposed rule, not settled law</span>
       </footer>
     </div>
   );

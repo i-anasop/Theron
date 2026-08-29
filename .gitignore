@@ -30,3 +30,4 @@ npm-debug.log*
 # keep the template committed
 !.env.example
 .cron-secret.txt
+.commitmsg.txt

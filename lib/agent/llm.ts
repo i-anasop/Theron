@@ -4,7 +4,7 @@
  * Theron's reasoning layer is deliberately swappable. Every provider below
  * speaks the same OpenAI-compatible chat-completions shape with tool calling,
  * so the agent loop is written once and the operator picks whichever key they
- * can obtain — including several that are free with no card.
+ * can obtain - including several that are free with no card.
  *
  * This is not only a cost decision. The judging criteria reward deployable
  * work, and a system that hard-codes one paid vendor is harder for a real
@@ -60,55 +60,73 @@ export interface ProviderConfig {
 }
 
 /**
- * Free-tier-first provider resolution. Each entry names the environment
+ * Strips whitespace and a byte-order mark from a credential.
+ *
+ * Secrets pick up invisible junk in transit - a BOM from a file read, a
+ * newline from a shell pipe. The resulting failure names neither the key nor
+ * its origin: the header encoder rejects it with "character at index 7 has a
+ * value of 65279", which cost this project a production outage to diagnose.
+ * Cheaper to clean here than to debug there.
+ */
+function cleanKey(v: string | undefined): string | undefined {
+  if (!v) return undefined;
+  const cleaned = v.replace(/^﻿/, "").trim();
+  return cleaned.length ? cleaned : undefined;
+}
+
+/**
+ * Free-tier-first provider resolution. Each branch names the environment
  * variable to set and the default model to use with it.
  */
 export function resolveProvider(): ProviderConfig {
-  const explicit = process.env.LLM_API_KEY;
+  const explicit = cleanKey(process.env.LLM_API_KEY);
   if (explicit) {
     return {
       name: "custom",
-      baseUrl: process.env.LLM_BASE_URL ?? "https://api.openai.com/v1",
+      baseUrl: process.env.LLM_BASE_URL?.trim() ?? "https://api.openai.com/v1",
       apiKey: explicit,
-      model: process.env.LLM_MODEL ?? "gpt-4o-mini",
+      model: process.env.LLM_MODEL?.trim() ?? "gpt-4o-mini",
     };
   }
 
-  if (process.env.GEMINI_API_KEY) {
+  const gemini = cleanKey(process.env.GEMINI_API_KEY);
+  if (gemini) {
     return {
       name: "gemini",
       baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
-      apiKey: process.env.GEMINI_API_KEY,
+      apiKey: gemini,
       // Lite carries a materially higher free-tier request rate than the full
       // flash models, which matters because one agent run is a burst of
       // sequential turns. Override with LLM_MODEL for a stronger reasoner.
-      model: process.env.LLM_MODEL ?? "gemini-3.1-flash-lite",
+      model: process.env.LLM_MODEL?.trim() ?? "gemini-3.1-flash-lite",
     };
   }
 
-  if (process.env.GROQ_API_KEY) {
+  const groq = cleanKey(process.env.GROQ_API_KEY);
+  if (groq) {
     return {
       name: "groq",
       baseUrl: "https://api.groq.com/openai/v1",
-      apiKey: process.env.GROQ_API_KEY,
-      model: process.env.LLM_MODEL ?? "llama-3.3-70b-versatile",
+      apiKey: groq,
+      model: process.env.LLM_MODEL?.trim() ?? "llama-3.3-70b-versatile",
     };
   }
 
-  if (process.env.OPENROUTER_API_KEY) {
+  const openrouter = cleanKey(process.env.OPENROUTER_API_KEY);
+  if (openrouter) {
     return {
       name: "openrouter",
       baseUrl: "https://openrouter.ai/api/v1",
-      apiKey: process.env.OPENROUTER_API_KEY,
-      model: process.env.LLM_MODEL ?? "meta-llama/llama-3.3-70b-instruct:free",
+      apiKey: openrouter,
+      model: process.env.LLM_MODEL?.trim() ?? "meta-llama/llama-3.3-70b-instruct:free",
     };
   }
 
   throw new Error(
-    "No LLM provider configured. Set one of these in .env (all have a free tier):\n" +
-      "  GEMINI_API_KEY      — aistudio.google.com/apikey  (recommended, no card)\n" +
-      "  GROQ_API_KEY        — console.groq.com/keys       (no card)\n" +
-      "  OPENROUTER_API_KEY  — openrouter.ai/keys          (free models available)\n" +
+    "No LLM provider configured. Set one of these (all have a free tier):\n" +
+      "  GEMINI_API_KEY      - aistudio.google.com/apikey  (recommended, no card)\n" +
+      "  GROQ_API_KEY        - console.groq.com/keys       (no card)\n" +
+      "  OPENROUTER_API_KEY  - openrouter.ai/keys          (free models available)\n" +
       "Or set LLM_BASE_URL + LLM_API_KEY + LLM_MODEL for any OpenAI-compatible endpoint.",
   );
 }
@@ -123,12 +141,16 @@ export class LLMClient {
   /**
    * Sends one turn, retrying through rate limits.
    *
-   * Free tiers are aggressively rate-limited — Gemini's is single-digit
-   * requests per minute — and an agent run is a burst of sequential turns.
-   * Without this the demo dies mid-answer on a 429, so retry is not optional
+   * Free tiers are aggressively rate-limited - Gemini's is single-digit
+   * requests per minute - and an agent run is a burst of sequential turns.
+   * Without this the demo dies mid-answer on a 429, so retry is not a nicety
    * here; it is what makes a free provider viable in front of an audience.
    */
-  async chat(messages: LLMMessage[], tools: LLMTool[], onRetry?: (waitMs: number) => void): Promise<LLMResponse> {
+  async chat(
+    messages: LLMMessage[],
+    tools: LLMTool[],
+    onRetry?: (waitMs: number) => void,
+  ): Promise<LLMResponse> {
     const body = {
       model: this.provider.model,
       messages: messages.map(serializeMessage),

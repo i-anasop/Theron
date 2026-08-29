@@ -90,7 +90,61 @@ export interface AgentRunOptions {
   onText?: (text: string) => void;
   /** Called when a provider rate limit forces a wait, with the delay in seconds. */
   onRetry?: (waitSeconds: number) => void;
+  /** Fires when a tool finishes, so a UI can show progress rather than a spinner. */
+  onToolResult?: (r: {
+    name: string;
+    ok: boolean;
+    ms: number;
+    creditsSpent: number;
+    apiCalls: number;
+    cacheHits: number;
+    summary: string;
+  }) => void;
+  /** Fires at the start of each model turn. */
+  onThinking?: (iteration: number) => void;
 }
+
+/**
+ * A one-line, human-readable gist of a tool result.
+ *
+ * The raw JSON is the wrong thing to stream to a watching human: it is long,
+ * and the interesting part is buried. This pulls out the field that answers
+ * "what did that call establish?" so the trace reads as a narrative.
+ */
+function summarize(name: string, raw: string): string {
+  try {
+    const d = JSON.parse(raw) as Record<string, unknown>;
+    if (d.error) return String(d.error);
+
+    switch (name) {
+      case "list_worksites":
+        return `${Array.isArray(d) ? d.length : "?"} worksites in portfolio`;
+      case "check_credit_budget":
+        return `${Number(d.remaining ?? 0).toLocaleString()} credits available`;
+      case "get_site_baseline": {
+        const s = d.stats as { count?: number; meanPeakC?: number } | undefined;
+        return s ? `${s.count} historical days, mean peak ${s.meanPeakC}°C` : "baseline loaded";
+      }
+      case "get_hourly_heat_curve": {
+        const r = d.readings as Array<{ heatIndexF: number }> | undefined;
+        if (!r?.length) return "no readings";
+        return `${r.length} hours, peak heat index ${Math.max(...r.map((x) => x.heatIndexF))}°F`;
+      }
+      case "evaluate_shift_move":
+        return `${String(d.verdict ?? "?").replace("_", " ")} — ${d.percentReduction ?? 0}% exposure reduction`;
+      case "compare_to_baseline":
+        return `${d.percentile}th percentile for this site`;
+      case "classify_heat_risk":
+        return `${String(d.level ?? "").toUpperCase()} — heat index ${d.heatIndexF}°F`;
+      default:
+        return "done";
+    }
+  } catch {
+    return "done";
+  }
+}
+
+export { summarize };
 
 export interface AgentRunResult {
   answer: string;
@@ -141,6 +195,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
 
   while (iterations < maxIterations) {
     iterations++;
+    opts.onThinking?.(iterations);
     const response = await llm.chat(messages, toLLMTools(tools), (waitMs) =>
       opts.onRetry?.(Math.round(waitMs / 1000)),
     );
@@ -179,6 +234,9 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
 
       opts.onToolCall?.(call.name, parsed);
 
+      const t0 = Date.now();
+      const callsBefore = trail.length;
+
       if (!tool) {
         ok = false;
         result = JSON.stringify({ error: `Unknown tool "${call.name}".` });
@@ -190,6 +248,17 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
           result = JSON.stringify({ error: (err as Error).message });
         }
       }
+
+      const made = trail.slice(callsBefore);
+      opts.onToolResult?.({
+        name: call.name,
+        ok,
+        ms: Date.now() - t0,
+        creditsSpent: budget.totalSpent,
+        apiCalls: made.length,
+        cacheHits: made.filter((c) => c.cached).length,
+        summary: summarize(call.name, result),
+      });
 
       messages.push({ role: "tool", tool_call_id: call.id, content: result });
       toolCalls.push({ name: call.name, input: parsed, ok });

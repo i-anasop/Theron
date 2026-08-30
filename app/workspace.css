@@ -39,8 +39,8 @@
 .rail:not(.ready) { transition: none; }
 
 .rail-mark {
-  display: flex; align-items: center; gap: 11px;
-  padding: 4px 6px 12px; border-bottom: 1px solid var(--rule); margin-bottom: 6px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 4px 0 12px; border-bottom: 1px solid var(--rule); margin-bottom: 6px;
 }
 .rail-mark:hover { text-decoration: none; }
 .rail-mark img { border-radius: 9px; flex: none; }

@@ -151,7 +151,7 @@ export function buildTools(ctx: AgentContext): AgentTool[] {
       name: "evaluate_shift_move",
       description:
         "Run the counterfactual: compare the site's scheduled shift against every alternative window of the " +
-        "same length in the day, and return the MEASURED difference in degF-hours of exposure above OSHA's " +
+        "same length in the day, and return the MEASURED difference in degF-hours of exposure above OSHA's proposed " +
         "high-heat trigger. Returns a verdict of reschedule, keep, or stand_down. Reuses cached hours, so " +
         "this is usually free after get_hourly_heat_curve. This is how a recommendation becomes evidence — " +
         "never assert a shift change without it.",
@@ -228,7 +228,7 @@ export function buildTools(ctx: AgentContext): AgentTool[] {
     {
       name: "classify_heat_risk",
       description:
-        "Classify a temperature and humidity pair against OSHA's proposed heat-index triggers, returning the " +
+        "Classify a temperature and humidity pair against the heat-index triggers in OSHA's proposed standard, returning the " +
         "risk level and the control measures that apply. Free — pure computation, no API call.",
       parameters: {
         type: "object",

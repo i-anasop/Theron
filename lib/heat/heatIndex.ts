@@ -69,7 +69,13 @@ export function heatIndexC(tempC: number, rhPct: number): number {
 
 /**
  * Trigger points from OSHA's proposed Heat Injury and Illness Prevention in
- * Outdoor and Indoor Work Settings rule (89 FR 70698, proposed Aug 2024).
+ * Outdoor and Indoor Work Settings rulemaking.
+ *
+ * No Federal Register or CFR citation appears here deliberately. We hold the
+ * agent to never citing one because it has no tool that returns them, and the
+ * same standard applies to the code: these thresholds were taken from the
+ * rulemaking's published heat-index triggers, and an operator deploying this
+ * should confirm them against the current text rather than trust a constant.
  *
  * This is a PROPOSED standard, not a finalised one. Theron cites it as the
  * operational basis for its thresholds and says so plainly — several state
@@ -102,8 +108,9 @@ export function assessRisk(tempF: number, rhPct: number): RiskAssessment {
       heatIndexF: hi,
       trigger: "high",
       guidance:
-        "Extreme risk. Heat stroke likely with prolonged exertion. Suspend non-essential outdoor work; " +
-        "mandatory 15-minute shaded rest every hour, active monitoring of every worker.",
+        "Extreme risk under OSHA's proposed heat standard (a proposed rule, not settled law). Heat stroke " +
+        "is likely with prolonged exertion: suspend non-essential outdoor work, enforce shaded rest " +
+        "breaks every hour, and monitor every worker actively.",
     };
   }
   if (hi >= OSHA_HEAT_INDEX_F.high) {
@@ -112,8 +119,8 @@ export function assessRisk(tempF: number, rhPct: number): RiskAssessment {
       heatIndexF: hi,
       trigger: "high",
       guidance:
-        "Above OSHA's proposed high-heat trigger. Mandatory paid rest breaks, buddy-system monitoring, " +
-        "and a heat emergency plan in effect.",
+        "Above the high-heat trigger in OSHA's proposed heat standard (a proposed rule, not settled law). " +
+        "Paid rest breaks, buddy-system monitoring, and a heat emergency plan apply.",
     };
   }
   if (hi >= OSHA_HEAT_INDEX_F.initial) {
@@ -122,15 +129,16 @@ export function assessRisk(tempF: number, rhPct: number): RiskAssessment {
       heatIndexF: hi,
       trigger: "initial",
       guidance:
-        "Above OSHA's proposed initial heat trigger. Provide cool drinking water, shaded break areas, " +
-        "and acclimatisation for new or returning workers.",
+        "Above the initial trigger in OSHA's proposed heat standard (a proposed rule, not settled law). " +
+        "Provide cool drinking water, shaded break areas, and acclimatisation for new or returning workers.",
     };
   }
   return {
     level: "safe",
     heatIndexF: hi,
     trigger: "none",
-    guidance: "Below OSHA trigger thresholds. Standard precautions apply.",
+    guidance: "Below the trigger thresholds in OSHA's proposed heat standard (a proposed rule, not settled law). " +
+      "Standard precautions apply.",
   };
 }
 

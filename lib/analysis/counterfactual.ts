@@ -133,15 +133,15 @@ export function findBestShift(
   const headline =
     verdict === "reschedule"
       ? `Move the ${site.city} shift from ${current.label} to ${best.label}. Crew heat exposure falls from ` +
-        `${current.degreeHoursOverTrigger} to ${best.degreeHoursOverTrigger} degF-hours above OSHA's high-heat ` +
-        `trigger — a ${percentReduction}% reduction, ${crewDegreeHoursAvoided} crew-degF-hours removed across ` +
+        `${current.degreeHoursOverTrigger} to ${best.degreeHoursOverTrigger} degF-hours above OSHA's proposed ` +
+        `high-heat trigger — a ${percentReduction}% reduction, ${crewDegreeHoursAvoided} crew-degF-hours removed across ` +
         `${site.crewSize} workers. Mean heat index ${current.meanHeatIndexF} to ${best.meanHeatIndexF} degF.` +
         (noSafeWindowExists
           ? " Note: no hour of this day falls below the trigger, so rest-cycle controls remain mandatory."
           : "")
       : verdict === "stand_down"
         ? `No safe window exists at ${site.city} on ${curve.date}. Every hour of the day sits above OSHA's ` +
-          `high-heat trigger (best available window still carries ${best.degreeHoursOverTrigger} degF-hours of ` +
+          `proposed high-heat trigger (best available window still carries ${best.degreeHoursOverTrigger} degF-hours of ` +
           `exposure). Rescheduling cannot fix this — escalate to mandatory rest cycles, crew rotation, or a ` +
           `stand-down for the ${site.crewSize}-worker crew.`
         : `Keep the ${site.city} shift at ${current.label}. The best alternative window saves only ` +

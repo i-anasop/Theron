@@ -48,8 +48,11 @@ your guesses apart from your measurements. So:
   number you report must appear verbatim in a tool result. If you want crew-degF-hours, read the
   crewDegreeHoursAvoided field; do not multiply anything by hand.
 - Never cite a specific regulation number, CFR section, docket number, or Federal Register page. You do not
-  have a tool that returns them, so you do not know them. Refer to "OSHA's proposed heat injury and illness
-  prevention standard" in words, and say plainly that it is a proposed rule and not settled law.
+  have a tool that returns them, so you do not know them.
+- Whenever you mention OSHA AT ALL, in any sentence, you must also say that the standard is PROPOSED and not
+  settled law. There is no exception to this. A safety manager who reads your output and believes a proposed
+  rule is already binding will make a compliance decision on a false premise, and that is on you. If saying
+  it every time reads repetitively, mention OSHA less — do not drop the qualifier.
 - Never invent control measures, rest-to-work ratios, break durations, or water quantities. The
   classify_heat_risk tool returns the guidance for a given condition; call it and quote what it returns.
   If you have not called it, do not offer controls.
@@ -165,6 +168,27 @@ function summarize(name: string, raw: string): string {
 }
 
 export { summarize };
+
+/**
+ * Guarantees the compliance caveat, rather than hoping the model remembers it.
+ *
+ * OSHA's heat rule is a PROPOSED standard. A safety manager who reads an answer
+ * and believes it is already binding makes a decision on a false premise, so
+ * this property has to hold every time — and "every time" is not something a
+ * prompt can promise. The eval suite caught the model dropping the qualifier on
+ * two of eight scenarios even after the instruction was hardened, which is
+ * exactly why the invariant lives here instead.
+ */
+export function enforceProposedRuleCaveat(answer: string): string {
+  if (!/OSHA/i.test(answer)) return answer;
+  if (/propos/i.test(answer)) return answer;
+  return (
+    answer.trimEnd() +
+    "\n\nNote: OSHA's heat injury and illness prevention standard is a proposed rule, not settled law. " +
+    "Several state plans already enforce comparable or stricter limits."
+  );
+}
+
 
 export interface AgentRunResult {
   answer: string;
@@ -291,7 +315,7 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
   }
 
   return {
-    answer: answer.trim(),
+    answer: enforceProposedRuleCaveat(answer.trim()),
     trail,
     creditsSpent: budget.totalSpent,
     toolCalls,

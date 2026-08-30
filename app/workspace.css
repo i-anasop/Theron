@@ -51,14 +51,9 @@
 .rail.open .rail-mark-name { opacity: 1; }
 
 .rail-nav { display: flex; flex-direction: column; gap: 3px; }
-.rail-foot {
-  margin-top: auto; display: flex; flex-direction: column; gap: 3px;
-  padding-top: 10px; border-top: 1px solid var(--rule);
-}
-
 .rail-item {
   display: flex; align-items: center; gap: 12px;
-  padding: 8px; border-radius: 10px; border: 0; background: transparent;
+  padding: 9px 8px; border-radius: 10px; border: 0; background: transparent;
   cursor: pointer; font-family: inherit; text-align: left; width: 100%;
   color: var(--ink-2); transition: background .14s ease, color .14s ease;
 }
@@ -69,13 +64,26 @@
 .rail-ico svg { width: 19px; height: 19px; }
 
 .rail-text {
-  display: flex; flex-direction: column; gap: 1px; min-width: 0;
-  opacity: 0; white-space: nowrap; transition: opacity .16s ease;
+  font-size: .89rem; font-weight: 560; letter-spacing: -.014em;
+  white-space: nowrap; opacity: 0; transition: opacity .16s ease;
 }
 .rail.open .rail-text { opacity: 1; }
-.rail-text b { font-size: .875rem; font-weight: 570; letter-spacing: -.012em; }
-.rail-text small { font-size: .72rem; color: var(--ink-3); }
-.rail-item.on .rail-text small { color: var(--cobalt); opacity: .75; }
+
+/* Foot controls are chrome, not destinations: icon-only at every width. */
+.rail-foot {
+  margin-top: auto; padding-top: 10px; border-top: 1px solid var(--rule);
+  display: flex; align-items: center; gap: 6px;
+}
+.rail:not(.open) .rail-foot { flex-direction: column; }
+
+.rail-mini {
+  width: 36px; height: 36px; flex: none;
+  display: grid; place-items: center;
+  border: 0; background: transparent; border-radius: 9px; cursor: pointer;
+  color: var(--ink-3); transition: background .14s ease, color .14s ease;
+}
+.rail-mini:hover { background: var(--card-2); color: var(--ink); text-decoration: none; }
+.rail-mini svg { width: 18px; height: 18px; }
 
 .work-main { flex: 1; min-width: 0; }
 

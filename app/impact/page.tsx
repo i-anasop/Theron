@@ -2,276 +2,284 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import Icon, { type IconName } from "@/components/Icon";
 
 /**
  * Turns measured heat exposure into the language a safety manager budgets in.
  *
- * The honest split matters here: Theron supplies the PHYSICAL quantity it
- * actually measured (degree-hours and exposure hours above the OSHA trigger,
- * from real API calls). The reader supplies the ECONOMICS, because loaded
- * labour rates, incident costs and productivity impacts are specific to a
- * business and we will not invent them.
+ * The split is the honest part: Theron supplies the PHYSICAL quantity it
+ * measured — degree-hours above the OSHA trigger, from real API calls — and
+ * the reader supplies the ECONOMICS, because loaded labour rates and incident
+ * costs are specific to a business and we will not invent them.
  *
- * Every assumption below is visible and editable rather than baked into a
- * headline. A model whose inputs you cannot see is a model you cannot defend
- * to a CFO.
+ * Every assumption is a visible control rather than a constant buried in a
+ * headline. A model whose inputs you cannot see is a model you cannot defend.
  */
 
-/* Measured at Roosevelt Row, Phoenix AZ, 2026-08-28 — see /method. */
+/* Measured at Roosevelt Row, Phoenix AZ, 2026-08-28. See /method. */
 const MEASURED = {
   site: "Roosevelt Row Mixed-Use, Phoenix AZ",
-  crewSize: 34,
-  shiftHours: 9,
-  exposureHoursNow: 9,
+  exposureHours: 9,
   degreeHoursNow: 138.5,
   degreeHoursMoved: 95,
   percentReduction: 31,
 };
 
-function money(n: number): string {
-  return n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const REDUCTION = 1 - MEASURED.degreeHoursMoved / MEASURED.degreeHoursNow;
+
+interface Input {
+  key: string;
+  label: string;
+  icon: IconName;
+  value: number;
+  set: (n: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  prefix?: string;
+  suffix?: string;
 }
 
+const money0 = (n: number) =>
+  n.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+
 export default function Impact() {
-  const [crew, setCrew] = useState(MEASURED.crewSize);
+  const [crew, setCrew] = useState(34);
   const [rate, setRate] = useState(48);
   const [days, setDays] = useState(60);
   const [lossPct, setLossPct] = useState(18);
   const [incidentRate, setIncidentRate] = useState(1.2);
   const [incidentCost, setIncidentCost] = useState(42000);
 
+  const inputs: Input[] = [
+    { key: "crew", label: "Crew size", icon: "crew", value: crew, set: setCrew, min: 1, max: 400, step: 1, suffix: "workers" },
+    { key: "rate", label: "Loaded hourly cost", icon: "wage", value: rate, set: setRate, min: 15, max: 200, step: 1, prefix: "$", suffix: "/hr" },
+    { key: "days", label: "High-heat days", icon: "calendar", value: days, set: setDays, min: 1, max: 180, step: 1, suffix: "per season" },
+    { key: "loss", label: "Output loss in heat", icon: "gauge", value: lossPct, set: setLossPct, min: 0, max: 60, step: 1, suffix: "%" },
+    { key: "rate2", label: "Incidents / 1,000 crew-hrs", icon: "alert", value: incidentRate, set: setIncidentRate, min: 0, max: 10, step: 0.1, suffix: "%" },
+    { key: "cost", label: "Cost per incident", icon: "receipt", value: incidentCost, set: setIncidentCost, min: 0, max: 300000, step: 1000, prefix: "$" },
+  ];
+
   const calc = useMemo(() => {
-    const reduction = 1 - MEASURED.degreeHoursMoved / MEASURED.degreeHoursNow;
+    const crewHoursPerDay = MEASURED.exposureHours * crew;
+    const crewHours = crewHoursPerDay * days;
 
-    // Productivity: crew-hours worked above the trigger, discounted by the
-    // assumed output loss while working in high heat.
-    const crewHoursNow = MEASURED.exposureHoursNow * crew * days;
-    const productivityLossNow = crewHoursNow * rate * (lossPct / 100);
-    const productivitySaved = productivityLossNow * reduction;
+    const prodNow = crewHours * rate * (lossPct / 100);
+    const prodSaved = prodNow * REDUCTION;
 
-    // Incident exposure: scaled by crew-hours above the trigger.
-    const incidentsNow = (crewHoursNow / 1000) * (incidentRate / 100);
-    const incidentCostNow = incidentsNow * incidentCost;
-    const incidentSaved = incidentCostNow * reduction;
+    const incidents = (crewHours / 1000) * (incidentRate / 100);
+    const incNow = incidents * incidentCost;
+    const incSaved = incNow * REDUCTION;
+
+    // Cumulative curve across the season, for the chart.
+    const perDayNow = (prodNow + incNow) / Math.max(1, days);
+    const perDayNew = perDayNow * (1 - REDUCTION);
+    const series = Array.from({ length: days + 1 }, (_, d) => ({
+      d,
+      now: perDayNow * d,
+      next: perDayNew * d,
+    }));
 
     return {
-      reduction,
-      crewHoursNow,
-      productivityLossNow,
-      productivitySaved,
-      incidentsNow,
-      incidentCostNow,
-      incidentSaved,
-      total: productivitySaved + incidentSaved,
+      crewHours,
+      prodNow,
+      prodSaved,
+      incNow,
+      incSaved,
+      incidents,
+      totalNow: prodNow + incNow,
+      totalSaved: prodSaved + incSaved,
+      series,
     };
   }, [crew, rate, days, lossPct, incidentRate, incidentCost]);
 
-  const field = (
-    label: string,
-    value: number,
-    setter: (n: number) => void,
-    opts: { min: number; max: number; step: number; prefix?: string; suffix?: string; help: string },
-  ) => (
-    <div className="card" style={{ padding: "16px 18px" }}>
-      <label className="label" style={{ display: "block" }}>
-        {label}
-      </label>
-      <div style={{ display: "flex", alignItems: "baseline", gap: 6, marginTop: 8 }}>
-        {opts.prefix && <span style={{ color: "var(--ink-3)", fontSize: ".95rem" }}>{opts.prefix}</span>}
-        <input
-          type="number"
-          value={value}
-          min={opts.min}
-          max={opts.max}
-          step={opts.step}
-          onChange={(e) => setter(Number(e.target.value))}
-          style={{
-            width: "100%",
-            border: 0,
-            background: "transparent",
-            color: "var(--ink)",
-            fontSize: "1.5rem",
-            fontWeight: 650,
-            letterSpacing: "-.035em",
-            fontVariantNumeric: "tabular-nums",
-            padding: 0,
-            fontFamily: "inherit",
-          }}
-        />
-        {opts.suffix && <span style={{ color: "var(--ink-3)", fontSize: ".9rem" }}>{opts.suffix}</span>}
-      </div>
-      <input
-        type="range"
-        value={value}
-        min={opts.min}
-        max={opts.max}
-        step={opts.step}
-        onChange={(e) => setter(Number(e.target.value))}
-        style={{ width: "100%", marginTop: 10, accentColor: "var(--cobalt)" }}
-        aria-label={label}
-      />
-      <p style={{ margin: "8px 0 0", fontSize: ".78rem", color: "var(--ink-3)", lineHeight: 1.5 }}>{opts.help}</p>
-    </div>
-  );
+  /* chart geometry */
+  const W = 520;
+  const H = 190;
+  const maxY = Math.max(1, calc.series[calc.series.length - 1].now);
+  const px = (d: number) => (d / Math.max(1, days)) * W;
+  const py = (v: number) => H - (v / maxY) * H;
+
+  const lineNow = calc.series.map((p, i) => `${i ? "L" : "M"}${px(p.d).toFixed(1)},${py(p.now).toFixed(1)}`).join(" ");
+  const lineNew = calc.series.map((p, i) => `${i ? "L" : "M"}${px(p.d).toFixed(1)},${py(p.next).toFixed(1)}`).join(" ");
+  const gap = `${lineNow} L${px(days).toFixed(1)},${py(calc.series[days].next).toFixed(1)} ${calc.series
+    .slice()
+    .reverse()
+    .map((p) => `L${px(p.d).toFixed(1)},${py(p.next).toFixed(1)}`)
+    .join(" ")} Z`;
 
   return (
-    <div className="wrap" style={{ paddingTop: 52 }}>
+    <div className="wrap" style={{ paddingTop: 46, paddingBottom: 24 }}>
       <div className="narrow">
         <div className="eyebrow">Impact</div>
-        <h1
-          style={{
-            margin: "14px 0 0",
-            fontSize: "2.2rem",
-            fontWeight: 670,
-            letterSpacing: "-.038em",
-            lineHeight: 1.1,
-          }}
-        >
-          What one rescheduled shift is worth
-        </h1>
-        <p style={{ margin: "18px 0 0", fontSize: "1.04rem", color: "var(--ink-2)", lineHeight: 1.68 }}>
-          Theron measures the physical quantity: how far over the OSHA high-heat trigger a crew sits, and for
-          how long. What that exposure <em>costs</em> depends on your business, so those numbers are yours to
-          set. Everything below recalculates live.
+        <h1 className="page-h1">What one rescheduled shift is worth</h1>
+        <p className="page-lede">
+          Theron measures the exposure. You supply the economics. Every assumption below is yours to change.
         </p>
       </div>
 
-      <div className="callout" style={{ marginTop: 30 }}>
-        <b>Measured input, fixed.</b> At {MEASURED.site}, Theron measured{" "}
-        <b>{MEASURED.degreeHoursNow} °F·hours</b> of exposure above the trigger across the scheduled{" "}
-        {MEASURED.shiftHours}-hour shift, falling to <b>{MEASURED.degreeHoursMoved}</b> in the best alternative
-        window — a <b>{MEASURED.percentReduction}% reduction</b>. That figure came from the API and is not
-        adjustable here. <Link href="/method">See how it was measured →</Link>
-      </div>
-
-      <section style={{ paddingBottom: 24 }}>
-        <div className="sec-head">
-          <h2>Your assumptions</h2>
-          <p>Defaults are placeholders, not claims. Replace them with your own figures.</p>
-        </div>
-
-        <div className="grid-3">
-          {field("Crew size", crew, setCrew, {
-            min: 1,
-            max: 500,
-            step: 1,
-            suffix: "workers",
-            help: "Workers exposed during the shift at this site.",
-          })}
-          {field("Loaded hourly cost", rate, setRate, {
-            min: 15,
-            max: 200,
-            step: 1,
-            prefix: "$",
-            suffix: "/hr",
-            help: "Wage plus burden — insurance, equipment, overhead.",
-          })}
-          {field("High-heat days per season", days, setDays, {
-            min: 1,
-            max: 200,
-            step: 1,
-            suffix: "days",
-            help: "Days this site crosses the trigger. Phoenix runs far higher than most.",
-          })}
-          {field("Output loss in high heat", lossPct, setLossPct, {
-            min: 0,
-            max: 60,
-            step: 1,
-            suffix: "%",
-            help: "Productivity lost while working above the trigger. Set from your own records.",
-          })}
-          {field("Heat incidents per 1,000 crew-hours", incidentRate, setIncidentRate, {
-            min: 0,
-            max: 10,
-            step: 0.1,
-            suffix: "%",
-            help: "Your recordable heat-illness rate for exposed hours.",
-          })}
-          {field("Cost per heat incident", incidentCost, setIncidentCost, {
-            min: 0,
-            max: 500000,
-            step: 1000,
-            prefix: "$",
-            help: "Claim, lost time, investigation, and citation exposure combined.",
-          })}
-        </div>
-      </section>
-
-      <section style={{ paddingTop: 0 }}>
-        <div className="sec-head">
-          <h2>What Theron recovers</h2>
-          <p>
-            Applying the measured {MEASURED.percentReduction}% exposure reduction to your figures, across one
-            season at one site.
-          </p>
-        </div>
-
-        <div className="stats">
-          <div className="stat">
-            <span className="label">Crew-hours above trigger</span>
-            <div className="v">{Math.round(calc.crewHoursNow).toLocaleString()}</div>
-            <div className="foot">as currently scheduled, per season</div>
+      <div className="impact-grid">
+        {/* ── controls ── */}
+        <aside className="panel">
+          <div className="panel-head">
+            <span className="label">Your assumptions</span>
           </div>
-          <div className="stat">
-            <span className="label">Productivity recovered</span>
-            <div className="v">{money(calc.productivitySaved)}</div>
-            <div className="foot">of {money(calc.productivityLossNow)} lost to heat today</div>
+          <div className="fields">
+            {inputs.map((f) => (
+              <div className="field" key={f.key}>
+                <div className="field-top">
+                  <span className="field-label">
+                    <Icon name={f.icon} size={15} />
+                    {f.label}
+                  </span>
+                  <span className="field-val">
+                    {f.prefix}
+                    {f.value.toLocaleString()}
+                    {f.suffix && <small>{f.suffix}</small>}
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={f.min}
+                  max={f.max}
+                  step={f.step}
+                  value={f.value}
+                  onChange={(e) => f.set(Number(e.target.value))}
+                  aria-label={f.label}
+                />
+              </div>
+            ))}
           </div>
-          <div className="stat">
-            <span className="label">Incident exposure avoided</span>
-            <div className="v">{money(calc.incidentSaved)}</div>
-            <div className="foot">
-              {calc.incidentsNow.toFixed(1)} expected incidents at current scheduling
+        </aside>
+
+        {/* ── results ── */}
+        <div className="results">
+          <div className="headline-card">
+            <div>
+              <span className="label">Recovered per season, one site</span>
+              <div className="headline-v">{money0(calc.totalSaved)}</div>
+              <p className="headline-sub">
+                from {money0(calc.totalNow)} that heat currently costs at this site
+              </p>
+            </div>
+            <div className="headline-badge">
+              <Icon name="trend" size={18} />
+              &minus;{MEASURED.percentReduction}%
             </div>
           </div>
-          <div className="stat lead">
-            <span className="label">Total, one site, one season</span>
-            <div className="v">{money(calc.total)}</div>
-            <div className="foot">from moving shifts Theron already identified</div>
+
+          <div className="panel chart-card">
+            <div className="panel-head">
+              <span className="label">Cumulative cost across the season</span>
+              <span className="chart-key-inline">
+                <i className="k now" /> as scheduled
+                <i className="k next" /> with Theron
+              </span>
+            </div>
+            <div className="chart-body">
+              <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
+                   aria-label={`Cumulative heat cost over ${days} days`}>
+                <defs>
+                  <linearGradient id="gapfill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="var(--cobalt)" stopOpacity=".22" />
+                    <stop offset="100%" stopColor="var(--cobalt)" stopOpacity=".04" />
+                  </linearGradient>
+                </defs>
+                {[0.25, 0.5, 0.75].map((t) => (
+                  <line key={t} x1="0" y1={H * t} x2={W} y2={H * t}
+                        stroke="var(--rule)" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+                ))}
+                <path d={gap} fill="url(#gapfill)" />
+                <path d={lineNow} fill="none" stroke="var(--extreme)" strokeWidth="2"
+                      vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+                <path d={lineNew} fill="none" stroke="var(--cobalt)" strokeWidth="2"
+                      vectorEffect="non-scaling-stroke" strokeLinecap="round" />
+              </svg>
+              <div className="chart-axis">
+                <span>day 1</span>
+                <span className="chart-gap-label">{money0(calc.totalSaved)} gap</span>
+                <span>day {days}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="split-cards">
+            <div className="panel mini">
+              <span className="label">
+                <Icon name="gauge" size={14} /> Productivity
+              </span>
+              <div className="mini-v">{money0(calc.prodSaved)}</div>
+              <p className="mini-sub">
+                of {money0(calc.prodNow)} lost across{" "}
+                {Math.round(calc.crewHours).toLocaleString()} crew-hours over the trigger
+              </p>
+            </div>
+            <div className="panel mini">
+              <span className="label">
+                <Icon name="shield" size={14} /> Incident exposure
+              </span>
+              <div className="mini-v">{money0(calc.incSaved)}</div>
+              <p className="mini-sub">
+                {calc.incidents.toFixed(1)} expected incidents at current scheduling
+              </p>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="callout" style={{ marginTop: 22 }}>
-          <b>What this is not.</b> This is a transparent arithmetic model, not a study. It multiplies one
-          measured physical quantity by assumptions you supplied. Its value is that the measured half is real
-          and auditable — most heat-risk tools cannot show you even that much, and none of the numbers here
-          are hidden inside a black box.
+      {/* ── the fixed half ── */}
+      <div className="measured-strip">
+        <div className="measured-item">
+          <Icon name="clock" size={18} />
+          <div>
+            <span className="label">Measured exposure</span>
+            <b>{MEASURED.degreeHoursNow} &deg;F&middot;h</b>
+          </div>
         </div>
-      </section>
+        <div className="measured-arrow" aria-hidden>&rarr;</div>
+        <div className="measured-item">
+          <Icon name="trend" size={18} />
+          <div>
+            <span className="label">Best window found</span>
+            <b>{MEASURED.degreeHoursMoved} &deg;F&middot;h</b>
+          </div>
+        </div>
+        <div className="measured-note">
+          Fixed, not adjustable &mdash; these came from the API at {MEASURED.site}.{" "}
+          <Link href="/method">How it was measured &rarr;</Link>
+        </div>
+      </div>
 
-      <section style={{ paddingTop: 0 }}>
+      {/* ── why buy ── */}
+      <section style={{ paddingTop: 46 }}>
         <div className="sec-head">
-          <h2>Why a safety manager buys this</h2>
+          <div className="eyebrow">Why it gets bought</div>
+          <h2>Three reasons a safety manager signs</h2>
         </div>
         <div className="grid-3">
-          <div className="card feature">
-            <div className="n">01</div>
-            <h3>The obligation is arriving</h3>
-            <p>
-              OSHA&rsquo;s proposed heat injury and illness prevention standard sets explicit heat-index
-              triggers. Several state plans already enforce comparable or stricter limits. This is a
-              compliance requirement forming in real time, not a hypothetical.
-            </p>
-          </div>
-          <div className="card feature">
-            <div className="n">02</div>
-            <h3>Defensibility is the product</h3>
-            <p>
-              After an incident, the question is what you knew and when. Theron produces a timestamped record
-              of the conditions, the decision, and the data behind it — automatically, for every site, every
-              day.
-            </p>
-          </div>
-          <div className="card feature">
-            <div className="n">03</div>
-            <h3>It costs almost nothing to run</h3>
-            <p>
-              Two-stage triage screens a site for two API calls. A daily portfolio sweep is cheaper than a
-              single hour of the crew&rsquo;s time — and cached results mean re-asking never costs anything.
-            </p>
-          </div>
+          {(
+            [
+              ["file", "The obligation is arriving", "OSHA's proposed heat standard sets explicit heat-index triggers, and several state plans already enforce stricter limits."],
+              ["shield", "Defensibility is the product", "After an incident the question is what you knew and when. Theron leaves a timestamped record of the conditions, the decision, and the data behind it."],
+              ["receipt", "It costs almost nothing to run", "Triage screens a site for two API calls. A daily portfolio sweep costs less than an hour of one worker's time."],
+            ] as Array<[IconName, string, string]>
+          ).map(([icon, h, p]) => (
+            <div key={h} className="card feature">
+              <div className="n">
+                <Icon name={icon} size={16} />
+              </div>
+              <h3>{h}</h3>
+              <p>{p}</p>
+            </div>
+          ))}
         </div>
       </section>
+
+      <div className="callout" style={{ marginTop: 8 }}>
+        <b>What this is not.</b> A transparent arithmetic model, not a study. It multiplies one measured
+        physical quantity by assumptions you supplied. The value is that the measured half is real and
+        auditable, and none of it is hidden.
+      </div>
     </div>
   );
 }

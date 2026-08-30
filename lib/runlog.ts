@@ -61,25 +61,41 @@ export async function recordRun(run: RunRecord): Promise<void> {
 }
 
 export async function getRuns(limit = 10): Promise<RunHistory> {
+  const bundled = (seed as unknown as { runs?: RunRecord[] })?.runs ?? [];
+
   const r = await redis();
   if (r) {
     try {
       const raw = (await r.lrange(KEY, 0, limit - 1)) as unknown[];
-      const runs = raw
+      const live = raw
         .map((x) => (typeof x === "string" ? safeParse(x) : (x as RunRecord)))
         .filter((x): x is RunRecord => !!x);
-      if (runs.length) return { runs, source: "redis", durable: true };
+
+      if (live.length) {
+        // Merge rather than replace. The committed runs are real history, and
+        // hiding them the moment a store appears would make the log look like
+        // it started today.
+        return { runs: merge(live, bundled, limit), source: "redis", durable: true };
+      }
     } catch {
       /* fall through to the local stores */
     }
   }
 
   if (memory.length) {
-    return { runs: memory.slice(0, limit), source: "memory", durable: false };
+    return { runs: merge(memory, bundled, limit), source: "memory", durable: false };
   }
 
-  const bundled = (seed as unknown as { runs?: RunRecord[] })?.runs ?? [];
   return { runs: bundled.slice(0, limit), source: "bundled", durable: true };
+}
+
+/** Newest first, de-duplicated by id. */
+function merge(a: RunRecord[], b: RunRecord[], limit: number): RunRecord[] {
+  const seen = new Set<string>();
+  return [...a, ...b]
+    .filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)))
+    .sort((x, y) => y.ranAt.localeCompare(x.ranAt))
+    .slice(0, limit);
 }
 
 function safeParse(s: string): RunRecord | null {

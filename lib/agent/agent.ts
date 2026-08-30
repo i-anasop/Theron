@@ -321,6 +321,6 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
     toolCalls,
     iterations,
     provider: llm.provider.name,
-    model: llm.provider.model,
+    model: llm.activeModel,
   };
 }

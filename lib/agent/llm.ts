@@ -57,6 +57,15 @@ export interface ProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
+  /**
+   * Models to try, in order, when the primary is rate-limited or unavailable.
+   *
+   * Free tiers throttle per model, so a sibling on the same key is usually
+   * enough to keep going. Retrying alone is not: a quota that resets daily
+   * will not clear during a demo, and waiting out a 429 in front of an
+   * audience is indistinguishable from being broken.
+   */
+  fallbacks?: string[];
 }
 
 /**
@@ -99,6 +108,7 @@ export function resolveProvider(): ProviderConfig {
       // flash models, which matters because one agent run is a burst of
       // sequential turns. Override with LLM_MODEL for a stronger reasoner.
       model: process.env.LLM_MODEL?.trim() ?? "gemini-3.1-flash-lite",
+      fallbacks: ["gemini-flash-lite-latest", "gemini-2.5-flash-lite", "gemini-3.5-flash"],
     };
   }
 
@@ -133,9 +143,20 @@ export function resolveProvider(): ProviderConfig {
 
 export class LLMClient {
   readonly provider: ProviderConfig;
+  /** The model that actually served the last turn, after any fallback. */
+  activeModel: string;
 
   constructor(provider?: ProviderConfig) {
     this.provider = provider ?? resolveProvider();
+    this.activeModel = this.provider.model;
+  }
+
+  /** Primary first, then each declared fallback, de-duplicated. */
+  private modelChain(): string[] {
+    const seen = new Set<string>();
+    return [this.provider.model, ...(this.provider.fallbacks ?? [])].filter((m) =>
+      seen.has(m) ? false : (seen.add(m), true),
+    );
   }
 
   /**
@@ -151,43 +172,70 @@ export class LLMClient {
     tools: LLMTool[],
     onRetry?: (waitMs: number) => void,
   ): Promise<LLMResponse> {
-    const body = {
-      model: this.provider.model,
-      messages: messages.map(serializeMessage),
-      ...(tools.length ? { tools, tool_choice: "auto" as const } : {}),
-      temperature: 0.2,
-    };
-
+    const chain = this.modelChain();
     let res!: Response;
     let lastError = "";
+    let lastStatus = 0;
 
-    for (let attempt = 0; attempt < 6; attempt++) {
-      res = await fetch(`${this.provider.baseUrl}/chat/completions`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.provider.apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+    /*
+     * Try each model in turn, retrying within a model before moving on.
+     *
+     * Order matters: a 429 is worth waiting out once, because a per-minute
+     * limit clears. A second 429 usually means a per-day quota, which will
+     * not clear at all, and at that point switching models is the only thing
+     * that helps. A 404 means the model is gone — move on immediately rather
+     * than burning retries on it.
+     */
+    for (const model of chain) {
+      const body = {
+        model,
+        messages: messages.map(serializeMessage),
+        ...(tools.length ? { tools, tool_choice: "auto" as const } : {}),
+        temperature: 0.2,
+      };
 
-      if (res.ok) break;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        res = await fetch(`${this.provider.baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${this.provider.apiKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
 
-      lastError = await res.text();
-      const retryable = res.status === 429 || res.status >= 500;
-      if (!retryable || attempt === 5) {
-        throw new Error(`${this.provider.name} returned ${res.status}: ${lastError.slice(0, 400)}`);
+        if (res.ok) {
+          this.activeModel = model;
+          break;
+        }
+
+        lastError = await res.text();
+        lastStatus = res.status;
+
+        // Gone or rejected outright: another model may still work.
+        if (res.status === 404 || res.status === 400) break;
+
+        const retryable = res.status === 429 || res.status >= 500;
+        if (!retryable) {
+          throw new Error(`${this.provider.name} returned ${res.status}: ${lastError.slice(0, 400)}`);
+        }
+
+        if (attempt === 2) break; // exhausted this model; fall through to the next
+
+        const header = Number(res.headers.get("retry-after"));
+        const waitMs = Number.isFinite(header) && header > 0 ? header * 1000 : 12_000 * (attempt + 1);
+        onRetry?.(waitMs);
+        await new Promise((r) => setTimeout(r, waitMs));
       }
 
-      // Honour Retry-After when offered, otherwise back off 15s, 30s, 45s...
-      const header = Number(res.headers.get("retry-after"));
-      const waitMs = Number.isFinite(header) && header > 0 ? header * 1000 : 15_000 * (attempt + 1);
-      onRetry?.(waitMs);
-      await new Promise((r) => setTimeout(r, waitMs));
+      if (res.ok) break;
     }
 
     if (!res.ok) {
-      throw new Error(`${this.provider.name} returned ${res.status}: ${lastError.slice(0, 400)}`);
+      throw new Error(
+        `${this.provider.name} exhausted every model (${chain.join(", ")}). ` +
+          `Last status ${lastStatus}: ${lastError.slice(0, 300)}`,
+      );
     }
 
     const data = (await res.json()) as {

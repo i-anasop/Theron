@@ -9,6 +9,7 @@ import HeatChart from "@/components/HeatChart";
 import HeatGrid from "@/components/HeatGrid";
 import Sparkline from "@/components/Sparkline";
 import Icon from "@/components/Icon";
+import ScreenLocation from "@/components/ScreenLocation";
 
 interface Assessment {
   site: {
@@ -191,10 +192,28 @@ export default function Monitor() {
             })}
       </div>
 
+      <ScreenLocation date={DEMO_DATE} />
+
       {focus && active && (
         <div className="focus">
           <div className="focus-main">
-            <HeatGrid siteId={focus} date={DEMO_DATE} />
+            {cf ? (
+              <HeatGrid siteId={focus} date={DEMO_DATE} />
+            ) : (
+              <div className="no-grid">
+                <span className="no-grid-ico">
+                  <Icon name="gauge" size={22} />
+                </span>
+                <h3>Screened, not mapped</h3>
+                <p>
+                  The tile-by-tile map needs an hourly analysis &mdash; 24 API calls. Theron only buys that
+                  for sites its cheap screen flags, so this one has a reading but no map.
+                </p>
+                <p className="no-grid-note">
+                  That is the two-stage design working, not a gap: screening costs 2 calls instead of 24.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="focus-side">

@@ -69,10 +69,30 @@ directly from the evaluate_shift_move result.
 "Keep the shift as scheduled" and "no safe window exists, stand the crew down" are both valid and useful
 answers. Report gaps in the data as gaps; never fill them in.
 
-Be concise. Aim for under 400 words. No preamble, no restating the question, no tables of contents.`;
+CONVERSATION
+
+You are talking to a person, not filling in a form.
+
+- If they greet you or make small talk, answer in one friendly line and say what you can look up. Do not
+  call tools for a greeting.
+- Treat follow-ups as part of the same conversation. "What about Houston?", "why?", "and tomorrow?" all
+  refer to the site and day already under discussion.
+- Ask a short clarifying question only when the request is genuinely ambiguous AND the answer would change
+  what you spend credits on. Otherwise state your assumption in one clause and get on with it.
+- If someone asks what you can do, say it plainly in a few lines rather than listing tool names.
+
+Be concise. Under 300 words unless more is asked for. No preamble, no restating the question.`;
 
 export interface AgentRunOptions {
   goal: string;
+  /**
+   * Prior turns of the conversation, oldest first.
+   *
+   * Only the question and the final answer of each turn are replayed, not the
+   * tool traffic underneath — that would balloon the context for no gain, and
+   * the answers already carry every figure the tools produced.
+   */
+  history?: Array<{ role: "user" | "assistant"; content: string }>;
   baselines: SiteBaseline[];
   /** Credits this run may spend. */
   allowance?: number;
@@ -186,6 +206,11 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
             "reports that data is not cached, say so plainly — do not present it as an absence of heat risk."
           : "Live API calls are enabled; spend against the allowance deliberately."),
     },
+    ...(opts.history ?? []).map((m) =>
+      m.role === "user"
+        ? ({ role: "user", content: m.content } as LLMMessage)
+        : ({ role: "assistant", content: m.content } as LLMMessage),
+    ),
     { role: "user", content: opts.goal },
   ];
 

@@ -114,7 +114,7 @@ export default function Impact() {
         <div className="eyebrow">Impact</div>
         <h1 className="page-h1">What one rescheduled shift is worth</h1>
         <p className="page-lede">
-          Theron measures the exposure. You supply the economics. Every assumption below is yours to change.
+          Theron measures the exposure. You supply the economics.
         </p>
       </div>
 
@@ -250,36 +250,10 @@ export default function Impact() {
         </div>
       </div>
 
-      {/* ── why buy ── */}
-      <section style={{ paddingTop: 46 }}>
-        <div className="sec-head">
-          <div className="eyebrow">Why it gets bought</div>
-          <h2>Three reasons a safety manager signs</h2>
-        </div>
-        <div className="grid-3">
-          {(
-            [
-              ["file", "The obligation is arriving", "OSHA's proposed heat standard sets explicit heat-index triggers, and several state plans already enforce stricter limits."],
-              ["shield", "Defensibility is the product", "After an incident the question is what you knew and when. Theron leaves a timestamped record of the conditions, the decision, and the data behind it."],
-              ["receipt", "It costs almost nothing to run", "Triage screens a site for two API calls. A daily portfolio sweep costs less than an hour of one worker's time."],
-            ] as Array<[IconName, string, string]>
-          ).map(([icon, h, p]) => (
-            <div key={h} className="card feature">
-              <div className="n">
-                <Icon name={icon} size={16} />
-              </div>
-              <h3>{h}</h3>
-              <p>{p}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <div className="callout" style={{ marginTop: 8 }}>
-        <b>What this is not.</b> A transparent arithmetic model, not a study. It multiplies one measured
-        physical quantity by assumptions you supplied. The value is that the measured half is real and
-        auditable, and none of it is hidden.
-      </div>
+      <p className="impact-note">
+        A transparent arithmetic model, not a study. It multiplies one measured quantity by assumptions you
+        supplied &mdash; and the measured half is real, auditable, and fixed.
+      </p>
     </div>
   );
 }

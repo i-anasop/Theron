@@ -17,7 +17,11 @@ export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const body = (await request.json().catch(() => ({}))) as { goal?: string; date?: string };
+  const body = (await request.json().catch(() => ({}))) as {
+    goal?: string;
+    date?: string;
+    history?: Array<{ role: "user" | "assistant"; content: string }>;
+  };
   const goal = body.goal?.trim();
 
   if (!goal) {
@@ -44,6 +48,9 @@ export async function POST(request: Request) {
 
         const result = await runAgent({
           goal,
+          // Only the last few turns: enough for "what about Houston?" to resolve,
+          // without dragging an entire session into every request.
+          history: (body.history ?? []).slice(-6),
           baselines: BASELINES,
           allowance: 400_000,
           cache: appCache(),

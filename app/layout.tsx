@@ -4,6 +4,8 @@ import "./globals.css";
 import "./workspace.css";
 import "./home.css";
 import "./hero3d.css";
+import "./ask.css";
+import "./screen.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });

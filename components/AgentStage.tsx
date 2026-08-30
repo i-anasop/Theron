@@ -1,16 +1,15 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import type { CallRecord } from "@/lib/fortyguard/client";
 
 /**
- * The workspace's front door.
+ * The workspace's front door: a conversation, not a one-shot form.
  *
- * Empty state is deliberately close to bare: a line of type and a field. The
- * moment a goal is submitted the page reflows — the prompt rises to the top
- * and the agent's reasoning fills the space beneath — so the interface is only
- * ever showing the one thing that matters at that moment.
+ * Each turn keeps its own reasoning trace, collapsed by default. The trace is
+ * what proves the answer was worked out rather than generated, so it stays
+ * available — but folded away, because after the first look what a user wants
+ * is the answer.
  */
 
 type StepState = "running" | "ok" | "failed";
@@ -22,71 +21,85 @@ interface Step {
   result?: string;
   state: StepState;
   ms?: number;
-  apiCalls?: number;
-  cacheHits?: number;
 }
 
-interface RunSummary {
-  creditsSpent: number;
-  iterations: number;
-  model: string;
-  trail: CallRecord[];
-  toolCalls: number;
+interface Turn {
+  id: number;
+  question: string;
+  steps: Step[];
+  answer: string;
+  error?: string;
+  credits?: number;
+  apiCalls?: number;
+  model?: string;
+  done: boolean;
+  open: boolean;
 }
 
 const SUGGESTIONS = [
-  "Should the Phoenix crew work their scheduled shift today?",
-  "Sweep the portfolio and tell me which site needs intervention most.",
-  "How does today compare to this site's own history?",
-  "Is there a safer window for the Phoenix shift, and by how much?",
+  "Can my Phoenix crew work their normal shift today?",
+  "Which site needs attention most right now?",
+  "Is today unusually hot for the Phoenix site?",
+  "Find a safer window for the Phoenix shift.",
 ];
 
 export default function AgentStage() {
-  const [goal, setGoal] = useState("");
-  const [started, setStarted] = useState(false);
-  const [asked, setAsked] = useState("");
-  const [steps, setSteps] = useState<Step[]>([]);
-  const [answer, setAnswer] = useState("");
-  const [summary, setSummary] = useState<RunSummary | null>(null);
+  const [input, setInput] = useState("");
+  const [turns, setTurns] = useState<Turn[]>([]);
   const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [showSug, setShowSug] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const endRef = useRef<HTMLDivElement | null>(null);
+  const nextId = useRef(1);
 
-  function finishLast(patch: Partial<Step>) {
-    setSteps((prev) => {
-      const next = [...prev];
-      for (let i = next.length - 1; i >= 0; i--) {
-        if (next[i].state === "running") {
-          next[i] = { ...next[i], ...patch };
-          break;
-        }
-      }
-      return next;
-    });
+  useEffect(() => {
+    if (turns.length) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [turns]);
+
+  function patch(id: number, fn: (t: Turn) => Turn) {
+    setTurns((prev) => prev.map((t) => (t.id === id ? fn(t) : t)));
   }
 
-  async function run(text?: string) {
-    const q = (text ?? goal).trim();
+  function closeLastStep(t: Turn, patchStep: Partial<Step>): Turn {
+    const steps = [...t.steps];
+    for (let i = steps.length - 1; i >= 0; i--) {
+      if (steps[i].state === "running") {
+        steps[i] = { ...steps[i], ...patchStep };
+        break;
+      }
+    }
+    return { ...t, steps };
+  }
+
+  async function send(text?: string) {
+    const q = (text ?? input).trim();
     if (!q || running) return;
+
+    const id = nextId.current++;
+    const history = turns
+      .filter((t) => t.answer)
+      .flatMap((t) => [
+        { role: "user" as const, content: t.question },
+        { role: "assistant" as const, content: t.answer },
+      ]);
+
+    setInput("");
+    setShowSug(false);
+    setRunning(true);
+    setTurns((prev) => [
+      ...prev.map((t) => ({ ...t, open: false })),
+      { id, question: q, steps: [], answer: "", done: false, open: true },
+    ]);
 
     abortRef.current?.abort();
     const ac = new AbortController();
     abortRef.current = ac;
 
-    setAsked(q);
-    setGoal(q);
-    setStarted(true);
-    setRunning(true);
-    setSteps([]);
-    setAnswer("");
-    setSummary(null);
-    setError(null);
-
     try {
       const res = await fetch("/api/agent/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: q }),
+        body: JSON.stringify({ goal: q, history }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`Agent unavailable (${res.status})`);
@@ -99,183 +112,228 @@ export default function AgentStage() {
         const { done, value } = await reader.read();
         if (done) break;
         buf += decoder.decode(value, { stream: true });
-
         const chunks = buf.split("\n\n");
         buf = chunks.pop() ?? "";
 
         for (const chunk of chunks) {
-          const evLine = chunk.split("\n").find((l) => l.startsWith("event: "));
-          const dataLine = chunk.split("\n").find((l) => l.startsWith("data: "));
-          if (!evLine || !dataLine) continue;
-          const ev = evLine.slice(7).trim();
-          const data = JSON.parse(dataLine.slice(6));
+          const ev = chunk.split("\n").find((l) => l.startsWith("event: "))?.slice(7).trim();
+          const dl = chunk.split("\n").find((l) => l.startsWith("data: "));
+          if (!ev || !dl) continue;
+          const data = JSON.parse(dl.slice(6));
 
           if (ev === "thinking") {
-            finishLast({ state: "ok" });
-            setSteps((p) => [...p, { kind: "think", label: `Planning · turn ${data.iteration}`, state: "running" }]);
-          } else if (ev === "tool") {
-            finishLast({ state: "ok" });
-            const args = JSON.stringify(data.input);
-            setSteps((p) => [
-              ...p,
-              { kind: "tool", label: data.name, detail: args === "{}" ? undefined : args, state: "running" },
-            ]);
-          } else if (ev === "tool_done") {
-            finishLast({
-              state: data.ok ? "ok" : "failed",
-              result: data.summary,
-              ms: data.ms,
-              apiCalls: data.apiCalls,
-              cacheHits: data.cacheHits,
+            patch(id, (t) => {
+              const base = closeLastStep(t, { state: "ok" });
+              return {
+                ...base,
+                steps: [...base.steps, { kind: "think", label: "Thinking", state: "running" }],
+              };
             });
+          } else if (ev === "tool") {
+            patch(id, (t) => {
+              const base = closeLastStep(t, { state: "ok" });
+              const args = JSON.stringify(data.input);
+              return {
+                ...base,
+                steps: [
+                  ...base.steps,
+                  {
+                    kind: "tool",
+                    label: data.name,
+                    detail: args === "{}" ? undefined : args,
+                    state: "running",
+                  },
+                ],
+              };
+            });
+          } else if (ev === "tool_done") {
+            patch(id, (t) =>
+              closeLastStep(t, { state: data.ok ? "ok" : "failed", result: data.summary, ms: data.ms }),
+            );
           } else if (ev === "retry") {
-            setSteps((p) => [...p, { kind: "think", label: `Rate limited · waiting ${data.seconds}s`, state: "running" }]);
+            patch(id, (t) => ({
+              ...t,
+              steps: [...t.steps, { kind: "think", label: `Rate limited, waiting ${data.seconds}s`, state: "running" }],
+            }));
           } else if (ev === "answer") {
-            finishLast({ state: "ok" });
-            setAnswer(data.answer);
+            patch(id, (t) => ({ ...closeLastStep(t, { state: "ok" }), answer: data.answer }));
           } else if (ev === "done") {
-            setSummary(data);
+            patch(id, (t) => ({
+              ...t,
+              done: true,
+              open: false,
+              credits: data.creditsSpent,
+              apiCalls: data.trail?.length ?? 0,
+              model: data.model,
+            }));
           } else if (ev === "error") {
-            setError(data.message);
+            patch(id, (t) => ({ ...t, error: data.message, done: true }));
           }
         }
       }
-      finishLast({ state: "ok" });
+      patch(id, (t) => ({ ...closeLastStep(t, { state: "ok" }), done: true }));
     } catch (e) {
-      if ((e as Error).name !== "AbortError") setError((e as Error).message);
+      if ((e as Error).name !== "AbortError") {
+        patch(id, (t) => ({ ...t, error: (e as Error).message, done: true }));
+      }
     } finally {
       setRunning(false);
     }
   }
 
-  function reset() {
-    abortRef.current?.abort();
-    setStarted(false);
-    setRunning(false);
-    setSteps([]);
-    setAnswer("");
-    setSummary(null);
-    setError(null);
-    setGoal("");
-  }
+  const composer = (
+    <div className="cmp">
+      <div className="cmp-field">
+        <textarea
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          placeholder="Ask about a site, a shift, or the whole portfolio…"
+          rows={2}
+          aria-label="Message Theron"
+          disabled={running}
+        />
+        <div className="cmp-actions">
+          <button
+            className={`cmp-sug-btn ${showSug ? "on" : ""}`}
+            onClick={() => setShowSug((s) => !s)}
+            aria-label="Show example questions"
+            aria-expanded={showSug}
+            title="Example questions"
+            type="button"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+                 strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M9 18h6M10 21.5h4" />
+              <path d="M12 2.5a6.5 6.5 0 0 0-3.7 11.85c.45.32.7.85.7 1.4V16h6v-.25c0-.55.25-1.08.7-1.4A6.5 6.5 0 0 0 12 2.5Z" />
+            </svg>
+          </button>
+          <button
+            className="cmp-send"
+            onClick={() => void send()}
+            disabled={running || !input.trim()}
+            aria-label="Send"
+            type="button"
+          >
+            {running ? (
+              <span className="cmp-spin" aria-hidden />
+            ) : (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                   strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M5 12h13M13 6l6 6-6 6" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
 
-  const field = (
-    <div className="ask-field">
-      <input
-        type="text"
-        value={goal}
-        onChange={(e) => setGoal(e.target.value)}
-        onKeyDown={(e) => e.key === "Enter" && run()}
-        placeholder="Ask about a worksite, a shift, or the whole portfolio…"
-        aria-label="What do you want to know?"
-        disabled={running}
-        autoFocus={!started}
-      />
-      <button className="ask-go" onClick={() => run()} disabled={running || !goal.trim()} aria-label="Run agent">
-        {running ? (
-          <span className="ask-spin" aria-hidden />
-        ) : (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1"
-               strokeLinecap="round" strokeLinejoin="round" width="17" height="17" aria-hidden>
-            <path d="M5 12h13M13 6l6 6-6 6" />
-          </svg>
-        )}
-      </button>
+      {showSug && (
+        <div className="cmp-sug">
+          {SUGGESTIONS.map((s) => (
+            <button key={s} type="button" onClick={() => void send(s)}>
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 
   /* ── empty state ── */
-  if (!started) {
+  if (!turns.length) {
     return (
-      <div className="ask-stage">
-        <div className="ask-center">
-          <Image src="/logo.png" alt="" width={62} height={62} className="ask-mark" priority />
-          <h1 className="ask-h1">What do you need to know?</h1>
-          <p className="ask-sub">
-            Put a goal in plain language. Theron plans its own API calls, checks the data, and answers with the
-            measurement behind it.
-          </p>
-
-          {field}
-
-          <div className="ask-chips">
-            {SUGGESTIONS.map((s) => (
-              <button key={s} className="ask-chip" onClick={() => run(s)}>
-                {s}
-              </button>
-            ))}
-          </div>
+      <div className="ask-empty">
+        <div className="ask-empty-in">
+          <Image src="/logo.png" alt="" width={56} height={56} className="ask-mark" priority />
+          <h1>What do you need to know?</h1>
+          {composer}
         </div>
       </div>
     );
   }
 
-  /* ── working / answered ── */
+  /* ── conversation ── */
   return (
-    <div className="ask-run">
-      <div className="ask-run-head">
-        <div className="ask-asked">
-          <span className="label">You asked</span>
-          <p>{asked}</p>
-        </div>
-        <button className="btn ghost sm" onClick={reset}>
-          New question
-        </button>
-      </div>
+    <div className="ask-thread">
+      <div className="thread">
+        {turns.map((t) => (
+          <div className="turn" key={t.id}>
+            <div className="turn-q">
+              <p>{t.question}</p>
+            </div>
 
-      {field}
+            <div className="turn-a">
+              <span className="turn-avatar" aria-hidden>
+                <Image src="/logo.png" alt="" width={28} height={28} />
+              </span>
 
-      <div className="ask-body">
-        <ol className="steps">
-          {steps.map((s, i) => (
-            <li key={i} className={`step ${s.state} ${s.kind}`}>
-              <span className="step-dot" aria-hidden />
-              <div className="step-body">
-                <div className="step-line">
-                  <span className="step-label">{s.label}</span>
-                  {s.detail && <code className="step-args">{s.detail}</code>}
-                  {s.ms !== undefined && <span className="step-ms">{s.ms} ms</span>}
-                </div>
-                {s.result && <div className="step-result">{s.result}</div>}
-                {s.apiCalls !== undefined && s.apiCalls > 0 && (
-                  <div className="step-meta">
-                    {s.apiCalls} API call{s.apiCalls === 1 ? "" : "s"} · {s.cacheHits} from cache
+              <div className="turn-body">
+                {t.steps.length > 0 && (
+                  <div className={`trace-box ${t.open ? "open" : ""}`}>
+                    <button
+                      className="trace-head"
+                      onClick={() => patch(t.id, (x) => ({ ...x, open: !x.open }))}
+                      aria-expanded={t.open}
+                      type="button"
+                    >
+                      <span className="trace-caret" aria-hidden>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+                          <path d="M9 6l6 6-6 6" />
+                        </svg>
+                      </span>
+                      {t.done ? (
+                        <span>
+                          Checked the data &middot; {t.steps.filter((s) => s.kind === "tool").length} lookups
+                        </span>
+                      ) : (
+                        <span className="trace-live">
+                          {t.steps[t.steps.length - 1]?.label ?? "Working"}
+                          <i />
+                          <i />
+                          <i />
+                        </span>
+                      )}
+                    </button>
+
+                    {t.open && (
+                      <ol className="trace-list">
+                        {t.steps.map((s, i) => (
+                          <li key={i} className={`tr ${s.state} ${s.kind}`}>
+                            <span className="tr-dot" aria-hidden />
+                            <div>
+                              <span className="tr-label">{s.label}</span>
+                              {s.result && <span className="tr-res">{s.result}</span>}
+                            </div>
+                            {s.ms !== undefined && <span className="tr-ms">{s.ms}ms</span>}
+                          </li>
+                        ))}
+                      </ol>
+                    )}
+                  </div>
+                )}
+
+                {t.answer && <div className="turn-answer">{t.answer}</div>}
+                {t.error && <div className="err" style={{ marginTop: 10 }}>{t.error}</div>}
+
+                {t.done && t.answer && (
+                  <div className="turn-meta">
+                    <span>{t.apiCalls ?? 0} data lookups</span>
+                    <span>{(t.credits ?? 0).toLocaleString()} credits</span>
                   </div>
                 )}
               </div>
-            </li>
-          ))}
-        </ol>
-
-        {error && <div className="err">{error}</div>}
-
-        {answer && (
-          <div className="answer-card">
-            <span className="label">Decision</span>
-            <p className="answer">{answer}</p>
+            </div>
           </div>
-        )}
-
-        {summary && (
-          <div className="runbar">
-            <span>
-              <b>{summary.toolCalls}</b> tool calls
-            </span>
-            <span>
-              <b>{summary.iterations}</b> turns
-            </span>
-            <span>
-              <b>{summary.trail?.length ?? 0}</b> API calls
-            </span>
-            <span>
-              <b>{summary.creditsSpent.toLocaleString()}</b> credits
-            </span>
-            <span>
-              reasoning <b>{summary.model}</b>
-            </span>
-          </div>
-        )}
+        ))}
+        <div ref={endRef} />
       </div>
+
+      <div className="composer-dock">{composer}</div>
     </div>
   );
 }

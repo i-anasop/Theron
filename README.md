@@ -1,13 +1,31 @@
+<div align="center">
+
+<img src="public/logo.png" alt="Theron" width="104" height="104" />
+
 # Theron
 
-**Know whether your crew can work today — before they show up.**
+### Know whether your crew can work today — before they show up.
 
-FortyGuard Hackathon '26 · Track 06 — Agentic AI
-**Live: [theron-ops.vercel.app](https://theron-ops.vercel.app)**
+An autonomous agent that checks how hot each worksite will actually get, decides whether the scheduled
+shift is safe, and when it isn't, **proves** which alternative window is safer and by how much.
 
-Theron is an autonomous agent for outdoor worksites. It checks how hot each site will actually get,
-decides whether the scheduled shift is safe, and when it isn't, **proves** which alternative window is safer
-and by how much. Every figure it reports traces back to an API call shown on the page.
+<br />
+
+[![Live demo](https://img.shields.io/badge/Live_demo-theron--ops.vercel.app-1450A0?style=for-the-badge)](https://theron-ops.vercel.app)
+[![Method](https://img.shields.io/badge/Method-what_we_measured-C4633C?style=for-the-badge)](https://theron-ops.vercel.app/method)
+
+![Tests](https://img.shields.io/badge/tests-47_passing-2f7d62)
+![Evals](https://img.shields.io/badge/agent_evals-8%2F8_scenarios-2f7d62)
+![Demo cost](https://img.shields.io/badge/demo_cost-0_credits-1450A0)
+![Track](https://img.shields.io/badge/Track_06-Agentic_AI-3e2a1e)
+![License](https://img.shields.io/badge/license-MIT-96877a)
+
+<br />
+
+**Built for the [FortyGuard Global AI Hackathon '26](https://www.fortyguard.com/hackathon26)**
+· *Building the World's Temperature AI* · Track 06 — Agentic AI
+
+</div>
 
 ---
 
@@ -238,5 +256,20 @@ probes/           raw API captures from the cost-model investigation
 
 ---
 
-Built for the FortyGuard Hackathon '26. Thresholds reference OSHA's **proposed** heat standard — a proposed
-rule, not settled law.
+## Licence
+
+MIT — see [LICENSE](LICENSE). The FortyGuard Temperature API and its data remain the property of FortyGuard;
+cached responses are committed only so the demo is reproducible.
+
+---
+
+<div align="center">
+
+**Theron** · Built for the [FortyGuard Global AI Hackathon '26](https://www.fortyguard.com/hackathon26)
+
+Thresholds reference OSHA's **proposed** heat injury and illness prevention standard —
+a proposed rule, not settled law.
+
+<sub>Every number on the live site traces to an API call you can inspect.</sub>
+
+</div>

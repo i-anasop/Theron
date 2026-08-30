@@ -96,3 +96,52 @@ export function getSite(id: string): Worksite {
   if (!site) throw new Error(`Unknown worksite "${id}". Known: ${WORKSITES.map((s) => s.id).join(", ")}`);
   return site;
 }
+
+/* ------------------------------------------------------------------ */
+/* User-defined sites                                                  */
+/* ------------------------------------------------------------------ */
+
+/** What a person actually types when adding their own worksite. */
+export interface UserSiteInput {
+  id?: string;
+  name: string;
+  lat: number;
+  lon: number;
+  crewSize?: number;
+  shiftStart?: string;
+  shiftEnd?: string;
+  work?: string;
+}
+
+/** Rough continental U.S. plus Alaska and Hawaii. */
+export const US_BOUNDS = { minLat: 18.0, maxLat: 71.5, minLon: -179.5, maxLon: -66.0 };
+
+export function isInsideUS(lat: number, lon: number): boolean {
+  return (
+    lat >= US_BOUNDS.minLat && lat <= US_BOUNDS.maxLat &&
+    lon >= US_BOUNDS.minLon && lon <= US_BOUNDS.maxLon
+  );
+}
+
+/**
+ * Turns user input into a Worksite the rest of the system can treat exactly
+ * like a built-in one. Defaults are conservative rather than clever: a missing
+ * crew size should under-state impact, not invent a big number.
+ */
+export function toWorksite(input: UserSiteInput): Worksite {
+  const lat = Number(input.lat);
+  const lon = Number(input.lon);
+  return {
+    id: input.id || `user-${lat.toFixed(3)}_${lon.toFixed(3)}`,
+    name: (input.name || "My worksite").slice(0, 80),
+    operator: "Added by you",
+    city: (input.name || "My worksite").slice(0, 40),
+    state: "US",
+    lat,
+    lon,
+    timezone: "UTC",
+    shift: { start: input.shiftStart || "06:00", end: input.shiftEnd || "15:00" },
+    crewSize: Math.max(1, Math.min(5000, Number(input.crewSize) || 10)),
+    work: input.work || "Outdoor work",
+  };
+}

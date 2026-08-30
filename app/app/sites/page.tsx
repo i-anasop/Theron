@@ -11,6 +11,7 @@ import Sparkline from "@/components/Sparkline";
 import Icon from "@/components/Icon";
 import ScreenLocation from "@/components/ScreenLocation";
 import RunHistory from "@/components/RunHistory";
+import MySites from "@/components/MySites";
 
 interface Assessment {
   site: {
@@ -190,6 +191,8 @@ export default function Monitor() {
               );
             })}
       </div>
+
+      <MySites />
 
       <ScreenLocation date={DEMO_DATE} />
 

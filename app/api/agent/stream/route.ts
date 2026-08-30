@@ -16,6 +16,7 @@ import { BASELINES } from "@/lib/baselines";
 import { appCache } from "@/lib/cache-factory";
 import { DEMO_DATE, PUBLIC_ROUTES_OFFLINE } from "@/lib/demo";
 import { claimLiveRun, liveQuota, settleLiveRun } from "@/lib/live-guard";
+import { isInsideUS, toWorksite } from "@/lib/sites";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -31,6 +32,7 @@ export async function POST(request: Request) {
     date?: string;
     live?: boolean;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
+    sites?: Array<Record<string, unknown>>;
   };
   const goal = body.goal?.trim();
 
@@ -81,6 +83,13 @@ export async function POST(request: Request) {
           // Only the last few turns: enough for "what about Houston?" to resolve,
           // without dragging an entire session into every request.
           history: (body.history ?? []).slice(-6),
+          // Sites the person added in their browser. Validated here rather than
+          // trusted: a client can send anything, and an out-of-coverage point
+          // would only waste a call to discover.
+          userSites: (body.sites ?? [])
+            .slice(0, 25)
+            .map((raw) => toWorksite(raw as never))
+            .filter((s) => isInsideUS(s.lat, s.lon)),
           baselines: BASELINES,
           allowance,
           cache: appCache(),

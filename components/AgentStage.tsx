@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Markdown from "@/components/Markdown";
+import { loadMySites } from "@/lib/my-sites";
 
 /**
  * The workspace's front door: a conversation, not a one-shot form.
@@ -53,6 +54,7 @@ export default function AgentStage() {
   const [toast, setToast] = useState<string | null>(null);
   const [live, setLive] = useState(false);
   const [quota, setQuota] = useState<{ perRun: number; remaining: number; available: boolean } | null>(null);
+  const [mySites, setMySites] = useState<unknown[]>([]);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const nextId = useRef(1);
@@ -60,6 +62,10 @@ export default function AgentStage() {
   useEffect(() => {
     if (turns.length) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns]);
+
+  useEffect(() => {
+    setMySites(loadMySites());
+  }, []);
 
   useEffect(() => {
     fetch("/api/agent/stream")
@@ -121,7 +127,7 @@ export default function AgentStage() {
       const res = await fetch("/api/agent/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: q, history, live }),
+        body: JSON.stringify({ goal: q, history, live, sites: mySites }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`Agent unavailable (${res.status})`);

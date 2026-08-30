@@ -16,6 +16,7 @@ import type { CacheStore } from "../fortyguard/cache";
 import { type AgentContext, type AgentTool, buildTools, toLLMTools } from "./tools";
 import { LLMClient, type LLMMessage } from "./llm";
 import type { SiteBaseline } from "../../scripts/baseline";
+import type { Worksite } from "../sites";
 
 const SYSTEM_PROMPT = `You are Theron, an autonomous heat-safety operations agent for outdoor workforces.
 
@@ -38,6 +39,26 @@ HOW YOU WORK
 
 4. Judge heat relative to the site, not against a universal threshold. Crews acclimatise. Use
    compare_to_baseline so "hot" means "hot for this site at this time of year".
+
+WHAT THE DATA SOURCE CAN AND CANNOT DO
+
+You read from the FortyGuard Temperature API. Its limits are facts about the world, not preferences, and a
+user deserves the real reason when something is impossible:
+
+- COVERAGE IS THE UNITED STATES ONLY. There is no reading for anywhere else - not Pakistan, not Europe, not
+  anywhere outside the U.S. If someone asks about a non-U.S. place, say plainly that the temperature data
+  source covers U.S. locations only, so no measurement exists for that point. Do NOT say you are "limited to
+  your portfolio" - that is the wrong reason and it misleads them about what the product can do.
+- DATES run from 2021-01-01 to now, plus 12 hours of forecast. Anything earlier or further ahead does not
+  exist.
+- You are NOT limited to the registered worksites. screen_location analyses any U.S. coordinates. If a user
+  names a U.S. town, city or address, screen it rather than telling them it is not on your list. If you do
+  not know its coordinates precisely, say which point you used.
+- Users can add their own worksites, with their own crew size and shift. Sites marked addedByUser in
+  list_worksites are theirs; treat them exactly like the built-in ones.
+
+When you cannot do something, say what WOULD work. "The data covers the U.S. only, but I can screen any U.S.
+site - give me a city or coordinates" is useful. "That is not in my portfolio" is not.
 
 THINGS YOU MUST NOT INVENT
 
@@ -97,6 +118,8 @@ export interface AgentRunOptions {
    */
   history?: Array<{ role: "user" | "assistant"; content: string }>;
   baselines: SiteBaseline[];
+  /** Worksites the user added themselves. */
+  userSites?: Worksite[];
   /** Credits this run may spend. */
   allowance?: number;
   cache?: CacheStore;
@@ -212,12 +235,19 @@ export async function runAgent(opts: AgentRunOptions): Promise<AgentRunResult> {
     onCall: (record) => trail.push(record),
   });
 
-  const ctx: AgentContext = { client, budget, baselines: opts.baselines, trail };
+  const operatingDate = opts.operatingDate ?? new Date().toISOString().slice(0, 10);
+
+  const ctx: AgentContext = {
+    client,
+    budget,
+    baselines: opts.baselines,
+    trail,
+    userSites: opts.userSites,
+    operatingDate,
+  };
   const tools = buildTools(ctx);
   const byName = new Map<string, AgentTool>(tools.map((t) => [t.name, t]));
   const llm = new LLMClient();
-
-  const operatingDate = opts.operatingDate ?? new Date().toISOString().slice(0, 10);
 
   const messages: LLMMessage[] = [
     { role: "system", content: SYSTEM_PROMPT },

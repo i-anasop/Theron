@@ -12,7 +12,8 @@
 
 import type { CallRecord, FortyGuardClient } from "../fortyguard/client";
 import { CREDIT_COST, type CreditBudget } from "../fortyguard/cost";
-import { getSite, WORKSITES } from "../sites";
+import { isInsideUS, WORKSITES, type Worksite } from "../sites";
+import { triageSite } from "../analysis/triage";
 import { buildHourlyCurve } from "../analysis/hourly";
 import { findBestShift } from "../analysis/counterfactual";
 import { compareToBaseline } from "../analysis/percentile";
@@ -34,6 +35,14 @@ export interface AgentContext {
   baselines: SiteBaseline[];
   /** Append-only record of everything the agent did. Rendered by the Auditor. */
   trail: CallRecord[];
+  /**
+   * Worksites the user added themselves, treated exactly like the built-in
+   * ones. A person's own site is the one they actually care about, so it must
+   * not be a second-class citizen in the tool surface.
+   */
+  userSites?: Worksite[];
+  /** The date the agent treats as today, so ad-hoc screens default correctly. */
+  operatingDate?: string;
 }
 
 const json = (v: unknown) => JSON.stringify(v, null, 2);
@@ -47,6 +56,13 @@ export function toLLMTools(tools: AgentTool[]): LLMTool[] {
 }
 
 export function buildTools(ctx: AgentContext): AgentTool[] {
+  const allSites = (): Worksite[] => [...WORKSITES, ...(ctx.userSites ?? [])];
+  const resolve = (id: string): Worksite => {
+    const s = allSites().find((x) => x.id === id);
+    if (!s) throw new Error(`Unknown worksite "${id}". Known: ${allSites().map((x) => x.id).join(", ")}`);
+    return s;
+  };
+
   return [
     {
       name: "list_worksites",
@@ -56,7 +72,8 @@ export function buildTools(ctx: AgentContext): AgentTool[] {
       parameters: { type: "object", properties: {}, required: [] },
       run: async () =>
         json(
-          WORKSITES.map((s) => ({
+          allSites().map((s) => ({
+            addedByUser: !WORKSITES.some((w) => w.id === s.id),
             id: s.id,
             name: s.name,
             operator: s.operator,
@@ -130,7 +147,7 @@ export function buildTools(ctx: AgentContext): AgentTool[] {
         const date = String(input.date ?? "");
         const startHour = Number(input.startHour);
         const endHour = Number(input.endHour);
-        const site = getSite(siteId);
+        const site = resolve(siteId);
         const hours = range(startHour, endHour);
 
         if (!ctx.budget.canAfford("heatmap", hours.length)) {
@@ -178,7 +195,7 @@ export function buildTools(ctx: AgentContext): AgentTool[] {
       run: async (input) => {
         const siteId = String(input.siteId ?? "");
         const date = String(input.date ?? "");
-        const site = getSite(siteId);
+        const site = resolve(siteId);
 
         /*
          * Default to the whole day, and never search a window narrower than
@@ -222,6 +239,104 @@ export function buildTools(ctx: AgentContext): AgentTool[] {
         const b = ctx.baselines.find((x) => x.siteId === siteId);
         if (!b) return json({ error: `No baseline for "${siteId}".` });
         return json(compareToBaseline(b, Number(input.peakTempC)));
+      },
+    },
+
+
+    {
+      name: "screen_location",
+      description:
+        `Screen ANY location by coordinates, without it being a registered worksite. Costs ` +
+        `${CREDIT_COST.heatmap + CREDIT_COST.env_params} credits for a new location; repeats are cached and ` +
+        "free. Use this when the user names a place that is not in the portfolio. COVERAGE IS UNITED STATES " +
+        "ONLY — the Temperature API returns nothing outside it, so check before spending. Returns a screening " +
+        "risk level, not a full hourly analysis.",
+      parameters: {
+        type: "object",
+        properties: {
+          latitude: { type: "number" },
+          longitude: { type: "number" },
+          label: { type: "string", description: "What to call this place in the answer" },
+          date: { type: "string", description: "YYYY-MM-DD. Defaults to the operating date." },
+        },
+        required: ["latitude", "longitude"],
+      },
+      run: async (input) => {
+        const lat = Number(input.latitude);
+        const lon = Number(input.longitude);
+        const label = String(input.label ?? "this location").slice(0, 60);
+
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+          return json({ error: "Provide a numeric latitude and longitude." });
+        }
+
+        // Checked before any call: the API rejects the rest of the world, and a
+        // rejected task still costs a round trip and an unhelpful error.
+        if (!isInsideUS(lat, lon)) {
+          return json({
+            error: "outside_coverage",
+            message:
+              `${label} (${lat}, ${lon}) is outside the Temperature API's coverage. The FortyGuard ` +
+              "Temperature API measures United States locations only, so no reading exists for this point. " +
+              "This is a limit of the data source, not of the portfolio.",
+            coverage: "United States only",
+          });
+        }
+
+        if (!ctx.budget.canAfford("heatmap")) {
+          return json({ error: "Insufficient budget to screen a new location." });
+        }
+
+        const site: Worksite = {
+          id: `adhoc-${lat.toFixed(3)}_${lon.toFixed(3)}`,
+          name: label,
+          operator: "-",
+          city: label,
+          state: "US",
+          lat,
+          lon,
+          timezone: "UTC",
+          shift: { start: "06:00", end: "15:00" },
+          crewSize: 10,
+          work: "Outdoor work",
+        };
+
+        try {
+          const t = await triageSite(ctx.client, site, String(input.date ?? ctx.operatingDate ?? ""));
+          return json({
+            ...t,
+            label,
+            latitude: lat,
+            longitude: lon,
+            /*
+             * The caveat travels with the fact.
+             *
+             * screeningHeatIndexF pairs the shift MEAN temperature with the
+             * worst hourly humidity, so it deliberately over-states: it exists
+             * to decide whether a site deserves the expensive hourly analysis,
+             * not to describe any hour that occurred. Left unlabelled, a model
+             * reports it as "the peak heat index" and a reader takes it as a
+             * measurement — so the label ships inside the result rather than
+             * relying on a prompt to remember it.
+             */
+            IMPORTANT:
+              "screeningHeatIndexF is a SCREENING ESTIMATE, not a measurement of any actual hour. " +
+              "It pairs the shift mean temperature with the worst humidity of the window, so it runs high " +
+              "by design. When reporting it, call it a screening estimate and say a full hourly analysis " +
+              "would be needed to give a real figure. Never present it as the measured peak heat index.",
+          });
+        } catch (err) {
+          const e = err as Error;
+          if (e.name === "CacheMissError") {
+            return json({
+              error: "needs_live",
+              message:
+                "This location has no cached reading. Ask again with live data enabled to fetch it from " +
+                "the API — the toggle sits under the message box.",
+            });
+          }
+          return json({ error: e.message });
+        }
       },
     },
 

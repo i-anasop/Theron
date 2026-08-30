@@ -111,3 +111,45 @@
   margin: 26px 0 0; padding-top: 18px; border-top: 1px solid var(--rule);
   font-size: .84rem; color: var(--ink-3); line-height: 1.62; max-width: 68ch;
 }
+
+/* ═════════════════════ your worksites ═════════════════════ */
+
+.mysites {
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r);
+  box-shadow: var(--sh-1); padding: 16px 18px; margin-bottom: 18px;
+}
+.mysites-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+}
+.mysites-head .label { display: inline-flex; align-items: center; gap: 7px; }
+.mysites-empty { margin: 12px 0 0; font-size: .85rem; color: var(--ink-3); line-height: 1.55; max-width: 62ch; }
+
+.mysites-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.mysite {
+  display: inline-flex; align-items: center; gap: 10px;
+  background: var(--cobalt-tint); border: 1px solid #c3d5ef; border-radius: 999px;
+  padding: 6px 8px 6px 14px; font-size: .84rem; color: var(--ink);
+}
+.mysite b { font-weight: 620; }
+.mysite i { font-style: normal; font-size: .74rem; color: var(--ink-3); }
+.mysite button {
+  width: 20px; height: 20px; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgba(20,80,160,.1); color: var(--cobalt);
+  font-size: 15px; line-height: 1; display: grid; place-items: center;
+}
+.mysite button:hover { background: var(--cobalt); color: #fff; }
+
+.mysites-form {
+  display: grid; gap: 10px; align-items: end; margin-top: 15px;
+  grid-template-columns: 1.6fr 1fr 1fr .7fr .8fr .8fr auto;
+}
+@media (max-width: 900px) { .mysites-form { grid-template-columns: 1fr 1fr; } }
+.mysites-form label { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.mysites-form input {
+  background: var(--paper); border: 1px solid var(--rule-2); border-radius: var(--r-sm);
+  padding: 9px 11px; font-family: inherit; font-size: .88rem; color: var(--ink); min-width: 0;
+}
+.mysites-form input:focus { outline: none; border-color: var(--cobalt); box-shadow: 0 0 0 3px var(--cobalt-ring); }
+
+.mysites-note { margin: 12px 0 0; font-size: .78rem; color: var(--ink-3); line-height: 1.55; }
+.mysites-note b { color: var(--ink-2); }

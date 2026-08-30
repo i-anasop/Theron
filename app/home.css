@@ -132,46 +132,7 @@
   border-radius: var(--r-xs); font-size: .86rem !important;
 }
 
-/* ── the insight, full bleed ── */
-
-.hm-feature {
-  padding: 84px 0; color: #fff; position: relative; overflow: hidden;
-  background: linear-gradient(135deg, var(--cobalt) 0%, var(--cobalt-2) 60%, #0b2f61 100%);
-}
-.hm-feature::after {
-  content: ""; position: absolute; inset: 0; pointer-events: none;
-  background: radial-gradient(700px 320px at 90% 130%, rgba(196,99,60,.34), transparent 70%);
-}
-.hm-feature-in {
-  position: relative; z-index: 1;
-  display: grid; gap: 46px; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  align-items: center;
-}
-@media (max-width: 880px) { .hm-feature-in { grid-template-columns: 1fr; gap: 32px; } .hm-feature { padding: 60px 0; } }
-
-.hm-feature-eyebrow { color: rgba(255,255,255,.6); }
-.hm-feature-line {
-  margin: 18px 0 0; font-size: clamp(1.5rem, 3.4vw, 2.3rem);
-  line-height: 1.22; letter-spacing: -.038em; font-weight: 620; max-width: 22ch;
-}
-.hm-feature-line strong { font-weight: 760; }
-.hm-feature-sub {
-  margin: 16px 0 0; font-size: clamp(1rem, 2vw, 1.25rem); line-height: 1.55;
-  color: rgba(255,255,255,.84); max-width: 40ch; font-weight: 420;
-}
-.hm-feature-sub strong { color: #fff; font-weight: 660; }
-
-.hm-clock { display: flex; gap: 3px; align-items: flex-end; flex-wrap: wrap; }
-.hm-clock i {
-  display: block; width: calc((100% - 69px) / 24); min-width: 6px; height: 32px;
-  background: rgba(255,255,255,.18); border-radius: 2px;
-}
-.hm-clock i.on { background: #fff; height: 54px; }
-.hm-clock-key {
-  width: 100%; display: flex; justify-content: space-between; margin-top: 12px;
-  font-family: var(--mono); font-size: 9px; letter-spacing: .12em;
-  text-transform: uppercase; color: rgba(255,255,255,.55);
-}
+/* the insight section now lives in hero3d.css */
 
 /* ── proof ── */
 

@@ -1,77 +1,77 @@
-/* Theron — the 3D thermal terrain, and the hover-reveal cards. */
+/* Theron — hero visual, hover cards, and the twelve-hour section. */
 
-/* ═════════════════════ 3D terrain ═════════════════════ */
+/* ═════════════════════ heat waves ═════════════════════ */
 
-.h3d {
-  background: linear-gradient(168deg, #101d2e 0%, #0a1420 62%, #08101a 100%);
-  border: 1px solid #1d3350;
+.hw {
+  margin: 0;
+  background: #060d16;
+  border: 1px solid #16283f;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(12,24,40,.2), 0 28px 60px -30px rgba(12,24,40,.55);
+  box-shadow: 0 2px 8px rgba(12,24,40,.18), 0 30px 64px -32px rgba(12,24,40,.5);
 }
 
-.h3d-top {
+.hw-top {
   display: flex; align-items: center; justify-content: space-between; gap: 14px;
   padding: 13px 16px; border-bottom: 1px solid rgba(255,255,255,.07);
 }
-.h3d-read { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
-.h3d-hour {
-  font-family: var(--mono); font-size: 1.12rem; font-weight: 700;
+.hw-read { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
+.hw-hour {
+  font-family: var(--mono); font-size: 1.1rem; font-weight: 700;
   letter-spacing: -.02em; color: #fff; font-variant-numeric: tabular-nums;
 }
-.h3d-temp {
-  font-size: 1.12rem; font-weight: 650; letter-spacing: -.03em;
+.hw-temp {
+  font-size: 1.1rem; font-weight: 650; letter-spacing: -.03em;
   color: #f0a878; font-variant-numeric: tabular-nums;
 }
-.h3d-top .tag { background: rgba(255,255,255,.08); color: rgba(255,255,255,.82); border-color: rgba(255,255,255,.14); }
+.hw-top .tag {
+  background: rgba(255,255,255,.08); color: rgba(255,255,255,.84);
+  border-color: rgba(255,255,255,.14);
+}
 
-.h3d-play {
-  width: 32px; height: 32px; flex: none; border-radius: 9px; cursor: pointer;
+.hw-play {
+  width: 30px; height: 30px; flex: none; border-radius: 8px; cursor: pointer;
   border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.06);
   color: rgba(255,255,255,.9); display: grid; place-items: center;
   transition: background .15s ease, border-color .15s ease;
 }
-.h3d-play:hover { background: rgba(255,255,255,.13); border-color: rgba(255,255,255,.26); }
+.hw-play:hover { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.28); }
 
-.h3d-stage { position: relative; touch-action: pan-y; cursor: grab; }
-.h3d-stage:active { cursor: grabbing; }
-.h3d-canvas { display: block; width: 100%; height: 330px; }
-@media (max-width: 940px) { .h3d-canvas { height: 280px; } }
+.hw-stage { position: relative; }
+.hw-canvas { display: block; width: 100%; height: 320px; }
+@media (max-width: 940px) { .hw-canvas { height: 250px; } }
 
-.h3d-empty {
+.hw-empty {
   position: absolute; inset: 0; display: grid; place-items: center;
-  color: rgba(255,255,255,.5); font-family: var(--mono); font-size: 11.5px;
-  letter-spacing: .06em; z-index: 2;
+  color: rgba(255,255,255,.45); font-family: var(--mono); font-size: 11px;
+  letter-spacing: .08em;
 }
 
-.h3d-tip {
-  position: absolute; pointer-events: none; z-index: 5;
-  background: rgba(0,0,0,.82); color: #fff;
-  font-family: var(--mono); font-size: 11px; font-weight: 600;
-  padding: 4px 8px; border-radius: 5px; white-space: nowrap;
-}
-
-.h3d-foot { padding: 12px 16px 14px; border-top: 1px solid rgba(255,255,255,.07); }
-.h3d-foot input[type="range"] {
-  width: 100%; accent-color: #6aa6e8; cursor: pointer; height: 4px; display: block;
-}
-.h3d-legend {
+.hw-foot { padding: 13px 16px 14px; border-top: 1px solid rgba(255,255,255,.07); }
+.hw-foot input[type="range"] { width: 100%; accent-color: #e0955f; cursor: pointer; height: 4px; display: block; }
+.hw-cap {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin-top: 11px; font-family: var(--mono); font-size: 9px;
   letter-spacing: .11em; text-transform: uppercase; color: rgba(255,255,255,.42);
 }
-.h3d-hint { color: rgba(255,255,255,.62); }
 
 /* ═════════════════════ hover-reveal cards ═════════════════════ */
 
+/* The grid must not resize when one card expands, or every card moves at once.
+   Reserving the row height keeps the reveal local to the card under the cursor. */
+.hm-cards { align-items: stretch; }
+
 .hc {
   position: relative; height: 100%;
+  min-height: 268px;
+  display: flex; flex-direction: column;
   background: var(--paper); border: 1px solid var(--rule);
   border-radius: var(--r); padding: 26px 24px 22px;
   cursor: default; outline: none;
   transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease, background .2s ease;
 }
 .hm-section .hc { background: var(--card); }
+@media (max-width: 620px) { .hc { min-height: 0; } }
 
 .hc:hover, .hc:focus-visible {
   border-color: var(--cobalt);
@@ -81,7 +81,7 @@
 .hc:focus-visible { outline: 2px solid var(--cobalt); outline-offset: 3px; }
 
 .hc-ico {
-  width: 42px; height: 42px; border-radius: 12px;
+  width: 42px; height: 42px; border-radius: 12px; flex: none;
   display: grid; place-items: center;
   background: var(--cobalt-tint); color: var(--cobalt);
   transition: background .2s ease, color .2s ease, transform .2s ease;
@@ -90,23 +90,12 @@
   background: var(--cobalt); color: #fff; transform: scale(1.06) rotate(-3deg);
 }
 
-.hc h3 {
-  margin: 18px 0 0; font-size: 1.25rem; font-weight: 660;
-  letter-spacing: -.03em; line-height: 1.2;
-}
+.hc h3 { margin: 18px 0 0; font-size: 1.25rem; font-weight: 660; letter-spacing: -.03em; line-height: 1.2; }
 .hc-kicker { margin: 5px 0 0; font-size: .88rem; color: var(--ink-3); }
 
-.hc-detail {
-  display: grid; grid-template-rows: 0fr;
-  transition: grid-template-rows .28s cubic-bezier(.3,.7,.3,1), opacity .22s ease;
-  opacity: 0;
-}
-.hc-detail > p {
-  overflow: hidden; margin: 0;
-  font-size: .875rem; line-height: 1.62; color: var(--ink-2);
-}
-.hc:hover .hc-detail, .hc:focus-visible .hc-detail { grid-template-rows: 1fr; opacity: 1; }
-.hc:hover .hc-detail > p, .hc:focus-visible .hc-detail > p { padding-top: 14px; }
+.hc-detail { opacity: 0; transform: translateY(6px); transition: opacity .24s ease, transform .24s ease; }
+.hc-detail > p { margin: 14px 0 0; font-size: .875rem; line-height: 1.62; color: var(--ink-2); }
+.hc:hover .hc-detail, .hc:focus-visible .hc-detail { opacity: 1; transform: none; }
 
 .hc-more {
   position: absolute; right: 20px; bottom: 18px;
@@ -116,10 +105,9 @@
 .hc-more svg { width: 100%; height: 100%; }
 .hc:hover .hc-more, .hc:focus-visible .hc-more { opacity: 0; transform: translateY(4px); }
 
-/* Touch devices have no hover: show everything, drop the affordance. */
 @media (hover: none) {
-  .hc-detail { grid-template-rows: 1fr; opacity: 1; }
-  .hc-detail > p { padding-top: 14px; }
+  .hc { min-height: 0; }
+  .hc-detail { opacity: 1; transform: none; }
   .hc-more { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -165,3 +153,71 @@
 @keyframes nudge { 0%,100% { transform: translateY(0); opacity: .5 } 50% { transform: translateY(4px); opacity: 1 } }
 @media (prefers-reduced-motion: reduce) { .hm-scroll svg { animation: none } }
 @media (max-width: 940px) { .hm-scroll { display: none; } }
+
+/* ═════════════════════ plain-language example ═════════════════════ */
+
+.hm-who {
+  display: inline-block;
+  font-size: .74rem; font-weight: 700; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-3);
+  background: var(--card); border: 1px solid var(--rule);
+  padding: 4px 11px; border-radius: 999px;
+}
+.hm-who.theron { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
+
+.hm-steps-title {
+  display: block; margin-bottom: 4px;
+  font-size: .82rem; font-weight: 600; color: var(--ink-3);
+}
+
+.hm-demo-steps { gap: 14px !important; }
+.hm-step { display: grid; grid-template-columns: 22px 1fr; gap: 4px 11px; align-items: start; }
+.hm-step-tick {
+  grid-row: span 2; width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; flex: none;
+  background: var(--safe-tint); color: var(--safe);
+}
+.hm-step-tick svg { width: 12px; height: 12px; }
+.hm-step b { font-size: .95rem; font-weight: 570; color: var(--ink); letter-spacing: -.015em; }
+.hm-step > span:last-child { font-size: .85rem; color: var(--ink-3); }
+
+.hm-verdict { font-size: 1.14rem !important; color: var(--ink) !important; margin-top: 12px !important; }
+.hm-verdict strong { color: var(--cobalt); }
+
+/* ═════════════════════ twelve hours ═════════════════════ */
+
+.hm-feature { padding: 96px 0; }
+@media (max-width: 760px) { .hm-feature { padding: 64px 0; } }
+
+.hm-feature-head { max-width: 44ch; }
+.hm-feature-line {
+  margin: 20px 0 0;
+  font-size: clamp(1.6rem, 3.6vw, 2.5rem);
+  line-height: 1.22; letter-spacing: -.04em; font-weight: 600;
+  color: rgba(255,255,255,.72);
+}
+.hm-feature-line strong { color: #fff; font-weight: 740; }
+
+.hm-day { margin: 54px 0 0; }
+.hm-day-track { display: flex; gap: 4px; align-items: flex-end; height: 66px; }
+.hm-day-track i {
+  flex: 1; display: block; border-radius: 3px; height: 26px;
+  background: rgba(255,255,255,.13);
+  transition: height .3s ease, background .3s ease;
+}
+.hm-day-track i.hz { background: rgba(255,255,255,.3); height: 40px; }
+.hm-day-track i.on { background: #fff; height: 66px; }
+
+.hm-day-key {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  margin-top: 16px;
+  font-family: var(--mono); font-size: 9.5px;
+  letter-spacing: .13em; text-transform: uppercase; color: rgba(255,255,255,.5);
+}
+.hm-day-mark { color: #fff; }
+
+.hm-feature-sub {
+  margin: 46px 0 0; max-width: 62ch;
+  font-size: clamp(1rem, 1.6vw, 1.12rem); line-height: 1.7;
+  color: rgba(255,255,255,.8); font-weight: 420;
+}

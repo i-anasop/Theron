@@ -4,7 +4,7 @@ import { sweep } from "@/lib/monitor";
 import { BASELINES } from "@/lib/baselines";
 import { appCache } from "@/lib/cache-factory";
 import { DEMO_DATE, DEMO_SITE_ID } from "@/lib/demo";
-import Heat3D from "@/components/Heat3D";
+import HeatWaves from "@/components/HeatWaves";
 import ShiftCompare from "@/components/ShiftCompare";
 import Reveal from "@/components/Reveal";
 import Icon, { type IconName } from "@/components/Icon";
@@ -137,7 +137,7 @@ export default async function Home() {
           </div>
 
           <div className="hm-hero-visual">
-            <Heat3D siteId={DEMO_SITE_ID} date={DEMO_DATE} />
+            <HeatWaves siteId={DEMO_SITE_ID} date={DEMO_DATE} />
           </div>
         </div>
 
@@ -174,42 +174,51 @@ export default async function Home() {
           <Reveal>
             <header className="hm-head center">
               <span className="eyebrow">See it</span>
-              <h2 className="hm-h2">One question, one answer, and the working</h2>
+              <h2 className="hm-h2">Ask a normal question. Get an answer you can act on.</h2>
             </header>
           </Reveal>
 
           <Reveal delay={60}>
             <div className="hm-demo">
               <div className="hm-demo-q">
-                <span className="label">You ask</span>
-                <p>Should the Phoenix crew work their scheduled shift today?</p>
+                <span className="hm-who">You</span>
+                <p>Can my Phoenix crew work their normal shift today?</p>
               </div>
 
               <div className="hm-demo-steps">
+                <span className="hm-steps-title">Theron goes and checks</span>
                 {[
-                  ["list_worksites", "3 worksites in portfolio"],
-                  ["get_hourly_heat_curve", "24 hours, peak heat index 106.7°F"],
-                  ["compare_to_baseline", "70th percentile for this site"],
-                  ["evaluate_shift_move", "reschedule — 31% exposure reduction"],
-                ].map(([tool, res]) => (
-                  <div className="hm-step" key={tool}>
-                    <span className="hm-step-dot" aria-hidden />
-                    <code>{tool}</code>
-                    <span>{res}</span>
+                  ["Found your sites", "3 worksites on file"],
+                  ["Checked every hour of the day", "hottest hour felt like 107°F"],
+                  ["Compared it to this site's own past", "hotter than 7 in 10 days here"],
+                  ["Tried every other shift time", "found one that's a third safer"],
+                ].map(([what, found]) => (
+                  <div className="hm-step" key={what}>
+                    <span className="hm-step-tick" aria-hidden>
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"
+                           strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m5 12.5 5 5 9-11" />
+                      </svg>
+                    </span>
+                    <b>{what}</b>
+                    <span>{found}</span>
                   </div>
                 ))}
               </div>
 
               <div className="hm-demo-a">
-                <span className="label">Theron answers</span>
+                <span className="hm-who theron">Theron</span>
+                <p className="hm-verdict">
+                  <strong>Move the shift.</strong> Start at 3&nbsp;PM instead of 6&nbsp;AM.
+                </p>
                 <p>
-                  <strong>Reschedule.</strong> Every hour of the scheduled 06:00&ndash;15:00 shift sits in the
-                  extreme range. Moving to 15:00&ndash;24:00 cuts crew heat exposure by <strong>31%</strong>{" "}
-                  &mdash; 1,479 crew-degree-hours removed across 34 workers.
+                  Your crew&rsquo;s time in dangerous heat drops by about a third. For 34 workers, that is
+                  roughly <strong>1,479 fewer crew-hours</strong> spent above the level where heat illness
+                  starts.
                 </p>
                 <p className="hm-demo-caveat">
-                  No hour of this day falls below the trigger, so rest-cycle controls remain mandatory
-                  regardless of timing.
+                  <strong>But:</strong> today is dangerous at every hour. Moving the shift helps, it does not
+                  make the day safe. Keep water, shade and rest breaks in place either way.
                 </p>
               </div>
             </div>
@@ -219,27 +228,41 @@ export default async function Home() {
 
       {/* ═══ the insight ═══ */}
       <section className="hm-feature">
-        <div className="wrap hm-feature-in">
-          <div>
-            <span className="eyebrow hm-feature-eyebrow">The insight it is built on</span>
-            <p className="hm-feature-line">
-              The API forecasts <strong>12 hours</strong> ahead.
-            </p>
-            <p className="hm-feature-sub">
-              Not a short forecast. <strong>Exactly one work shift</strong> &mdash; the next one, the one you
-              can still change.
-            </p>
+        <div className="wrap">
+          <div className="hm-feature-head">
+            <span className="eyebrow hm-feature-eyebrow">The idea it is built on</span>
+            <h2 className="hm-feature-line">
+              Twelve hours is not a short forecast.
+              <br />
+              It is <strong>exactly one work shift.</strong>
+            </h2>
           </div>
-          <div className="hm-clock" aria-hidden>
-            {Array.from({ length: 24 }, (_, h) => (
-              <i key={h} className={h >= 6 && h < 15 ? "on" : ""} />
-            ))}
-            <div className="hm-clock-key">
-              <span>00:00</span>
-              <span>the shift you can move</span>
-              <span>23:00</span>
+
+          <div className="hm-day" aria-hidden>
+            <div className="hm-day-track">
+              {Array.from({ length: 24 }, (_, h) => {
+                const inShift = h >= 6 && h < 15;
+                const inHorizon = h >= 6 && h < 18;
+                return (
+                  <i
+                    key={h}
+                    className={`${inShift ? "on " : ""}${inHorizon ? "hz" : ""}`}
+                    style={{ animationDelay: `${h * 42}ms` }}
+                  />
+                );
+              })}
+            </div>
+            <div className="hm-day-key">
+              <span>Midnight</span>
+              <span className="hm-day-mark">the next shift &mdash; still changeable</span>
+              <span>11 PM</span>
             </div>
           </div>
+
+          <p className="hm-feature-sub">
+            The temperature API sees twelve hours ahead. Read as weather, that is a limitation. Read as
+            operations, it is the exact window a safety manager works in: the shift that has not started yet.
+          </p>
         </div>
       </section>
 

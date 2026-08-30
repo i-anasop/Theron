@@ -252,10 +252,22 @@
 
 /* ═════════════════════ twelve hours ═════════════════════ */
 
-.hm-feature { padding: 96px 0; }
+.hm-feature {
+  padding: 96px 0;
+  position: relative;
+  overflow: hidden;
+  color: #fff;
+  background: linear-gradient(135deg, var(--cobalt) 0%, var(--cobalt-2) 60%, #0b2f61 100%);
+}
+.hm-feature::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(720px 340px at 88% 128%, rgba(196,99,60,.32), transparent 70%);
+}
+.hm-feature > .wrap { position: relative; z-index: 1; }
 @media (max-width: 760px) { .hm-feature { padding: 64px 0; } }
 
 .hm-feature-head { max-width: 44ch; }
+.hm-feature-eyebrow { color: rgba(255,255,255,.62); }
 .hm-feature-line {
   margin: 20px 0 0;
   font-size: clamp(1.6rem, 3.6vw, 2.5rem);

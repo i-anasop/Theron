@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import "./workspace.css";
 import "./home.css";
+import "./hero3d.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
 const mono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-mono", display: "swap" });
@@ -14,11 +15,11 @@ export const metadata: Metadata = {
     template: "%s · Theron",
   },
   description:
-    "Theron watches outdoor worksites for dangerous heat and, when a shift is unsafe, proves which " +
-    "alternative window is safer and by how much — measured against the FortyGuard Temperature API.",
+    "Theron checks how hot each worksite will actually get, decides whether the scheduled shift is safe, " +
+    "and proves which alternative window is safer and by how much.",
   openGraph: {
     title: "Theron — Autonomous Heat Safety for Outdoor Crews",
-    description: "It doesn't recommend a shift change. It proves one.",
+    description: "Know if your crew can work today. Measured, not estimated.",
     images: ["/logo.png"],
     type: "website",
   },

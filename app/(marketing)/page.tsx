@@ -4,51 +4,53 @@ import { sweep } from "@/lib/monitor";
 import { BASELINES } from "@/lib/baselines";
 import { appCache } from "@/lib/cache-factory";
 import { DEMO_DATE, DEMO_SITE_ID } from "@/lib/demo";
-import HeatGrid from "@/components/HeatGrid";
+import Heat3D from "@/components/Heat3D";
 import ShiftCompare from "@/components/ShiftCompare";
 import Reveal from "@/components/Reveal";
 import Icon, { type IconName } from "@/components/Icon";
 
-/**
- * Every figure here is produced by running a real sweep against the bundled
- * response cache at build time, so the page cannot claim something the system
- * does not actually do.
- */
 export const revalidate = 3600;
 
-const DOES: Array<[IconName, string, string]> = [
+/** Title always visible; the detail is revealed on hover or focus. */
+const DOES: Array<[IconName, string, string, string]> = [
   [
     "crew",
-    "Watches every worksite, every day",
-    "You register your sites once. Theron checks each one on its own schedule — street-level temperature, hour by hour, for the shift that has not happened yet.",
+    "Watches",
+    "Every site, every day",
+    "Register your worksites once. Theron checks each on its own schedule — street-level temperature, hour by hour, for the shift that has not happened yet.",
   ],
   [
     "gauge",
-    "Decides: work, move, or stand down",
+    "Decides",
+    "Work, move, or stand down",
     "Not a dashboard of numbers to interpret. One call per site, in the language a foreman uses, against the heat-index thresholds in OSHA's proposed standard.",
   ],
   [
     "shield",
-    "Proves the alternative before advising it",
-    "When a shift is unsafe, Theron tests every other window that day, finds the coolest, and reports the measured difference — never an estimate.",
+    "Proves",
+    "Before it advises",
+    "When a shift is unsafe it tests every other window that day, finds the coolest, and reports the measured difference — never an estimate.",
   ],
 ];
 
-const DIFFERENT: Array<[IconName, string, string]> = [
+const DIFFERENT: Array<[IconName, string, string, string]> = [
   [
     "trend",
-    "Measured, never guessed",
-    "Every number it reports comes out of an API call it made. The language model chooses what to ask and how to explain it — it never invents a figure.",
+    "Measured",
+    "Never guessed",
+    "Every number it reports came out of an API call it made. The model chooses what to ask and how to explain it — it never invents a figure.",
   ],
   [
     "alert",
-    "It refuses when it should",
-    "If no window in the day is safe, Theron says stand down instead of manufacturing a reschedule that looks useful.",
+    "Refuses",
+    "When it should",
+    "If no window in the day is safe, Theron says stand down rather than manufacturing a reschedule that merely looks useful.",
   ],
   [
     "file",
-    "It shows its work",
-    "Every call, its cost, its latency and its activity ID are on the page. You are never asked to trust the output; you are shown how to check it.",
+    "Auditable",
+    "Down to the call",
+    "Every request, its cost, its latency and its activity ID are on the page. You are never asked to trust it; you are shown how to check it.",
   ],
 ];
 
@@ -59,6 +61,36 @@ const FLOW = [
   ["Verify", "Queries the alternative hours"],
   ["Decide", "Reschedule, keep, or stand down"],
 ];
+
+function HoverCard({
+  icon,
+  title,
+  kicker,
+  detail,
+}: {
+  icon: IconName;
+  title: string;
+  kicker: string;
+  detail: string;
+}) {
+  return (
+    <article className="hc" tabIndex={0}>
+      <span className="hc-ico">
+        <Icon name={icon} size={20} />
+      </span>
+      <h3>{title}</h3>
+      <p className="hc-kicker">{kicker}</p>
+      <div className="hc-detail">
+        <p>{detail}</p>
+      </div>
+      <span className="hc-more" aria-hidden>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M6 9l6 6 6-6" />
+        </svg>
+      </span>
+    </article>
+  );
+}
 
 export default async function Home() {
   const result = await sweep({
@@ -71,67 +103,49 @@ export default async function Home() {
 
   const lead = result.assessments.find((a) => a.counterfactual?.verdict === "reschedule");
   const cf = lead?.counterfactual;
-  const crew = result.assessments.reduce((n, a) => n + a.site.crewSize, 0);
 
   return (
     <>
-      {/* ═══ hero ═══ */}
+      {/* ═══ hero — one screen ═══ */}
       <section className="hm-hero">
-        <div className="wrap">
-          <div className="hm-hero-grid">
-            <div>
-              <span className="hm-badge">
-                <Icon name="shield" size={13} />
-                FortyGuard Hackathon &rsquo;26 · Track 06 Agentic AI
-              </span>
+        <div className="wrap hm-hero-grid">
+          <div className="hm-hero-copy">
+            <span className="hm-badge">
+              <Icon name="shield" size={13} />
+              Track 06 · Agentic AI
+            </span>
 
-              <h1 className="hm-h1">
-                Know whether your crew can work today &mdash; before they show up.
-              </h1>
+            <h1 className="hm-h1">Know if your crew can work today.</h1>
 
-              <p className="hm-lede">
-                Theron is an autonomous agent for outdoor worksites. It checks how hot each site will
-                actually get, decides whether the scheduled shift is safe, and when it isn&rsquo;t, proves
-                which alternative window is safer and by how much.
-              </p>
+            <p className="hm-lede">
+              An autonomous agent that checks how hot each worksite will actually get, and proves which shift
+              window is safest.
+            </p>
 
-              <div className="hm-cta">
-                <Link href="/app" className="btn">
-                  Open the workspace
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
-                       strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden>
-                    <path d="M5 12h13M13 6l6 6-6 6" />
-                  </svg>
-                </Link>
-                <Link href="/method" className="btn ghost">
-                  Read the method
-                </Link>
-              </div>
-
-              <dl className="hm-facts">
-                <div>
-                  <dt>{cf ? `${cf.percentReduction}%` : "—"}</dt>
-                  <dd>exposure cut by moving one shift</dd>
-                </div>
-                <div>
-                  <dt>{crew}</dt>
-                  <dd>workers monitored in the demo</dd>
-                </div>
-                <div>
-                  <dt>320</dt>
-                  <dd>temperature tiles per reading</dd>
-                </div>
-              </dl>
-            </div>
-
-            <div className="hm-hero-visual">
-              <HeatGrid siteId={DEMO_SITE_ID} date={DEMO_DATE} />
-              <p className="hm-caption">
-                A real worksite in Phoenix, hour by hour. 320 tiles at 60&nbsp;m resolution, from the
-                FortyGuard Temperature API.
-              </p>
+            <div className="hm-cta">
+              <Link href="/app" className="btn">
+                Open the workspace
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                     strokeLinecap="round" strokeLinejoin="round" width="15" height="15" aria-hidden>
+                  <path d="M5 12h13M13 6l6 6-6 6" />
+                </svg>
+              </Link>
+              <Link href="/method" className="btn ghost">
+                How it works
+              </Link>
             </div>
           </div>
+
+          <div className="hm-hero-visual">
+            <Heat3D siteId={DEMO_SITE_ID} date={DEMO_DATE} />
+          </div>
+        </div>
+
+        <div className="hm-scroll" aria-hidden>
+          <span>What it does</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M12 5v13M6 13l6 6 6-6" />
+          </svg>
         </div>
       </section>
 
@@ -142,30 +156,19 @@ export default async function Home() {
             <header className="hm-head">
               <span className="eyebrow">What it does</span>
               <h2 className="hm-h2">Three jobs, done without being asked</h2>
-              <p className="hm-sub">
-                A safety manager sets up their sites once. After that Theron works on its own schedule and
-                only speaks up when something needs deciding.
-              </p>
             </header>
           </Reveal>
-
           <div className="hm-cards">
-            {DOES.map(([icon, h, p], i) => (
-              <Reveal key={h} delay={i * 70}>
-                <article className="hm-card">
-                  <span className="hm-card-ico">
-                    <Icon name={icon} size={19} />
-                  </span>
-                  <h3>{h}</h3>
-                  <p>{p}</p>
-                </article>
+            {DOES.map(([icon, t, k, d], i) => (
+              <Reveal key={t} delay={i * 70}>
+                <HoverCard icon={icon} title={t} kicker={k} detail={d} />
               </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ═══ see it ═══ */}
+      {/* ═══ worked example ═══ */}
       <section className="hm-section">
         <div className="wrap">
           <Reveal>
@@ -201,9 +204,8 @@ export default async function Home() {
                 <span className="label">Theron answers</span>
                 <p>
                   <strong>Reschedule.</strong> Every hour of the scheduled 06:00&ndash;15:00 shift sits in the
-                  extreme range. Moving to 15:00&ndash;24:00 cuts crew heat exposure by{" "}
-                  <strong>31%</strong> &mdash; 1,479 crew-degree-hours removed across 34 workers, mean heat
-                  index down from 105.4&thinsp;°F to 100.6&thinsp;°F.
+                  extreme range. Moving to 15:00&ndash;24:00 cuts crew heat exposure by <strong>31%</strong>{" "}
+                  &mdash; 1,479 crew-degree-hours removed across 34 workers.
                 </p>
                 <p className="hm-demo-caveat">
                   No hour of this day falls below the trigger, so rest-cycle controls remain mandatory
@@ -224,8 +226,8 @@ export default async function Home() {
               The API forecasts <strong>12 hours</strong> ahead.
             </p>
             <p className="hm-feature-sub">
-              That is not a short forecast. It is <strong>exactly one work shift</strong> &mdash; the next one,
-              the one you can still change.
+              Not a short forecast. <strong>Exactly one work shift</strong> &mdash; the next one, the one you
+              can still change.
             </p>
           </div>
           <div className="hm-clock" aria-hidden>
@@ -241,7 +243,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ═══ the proof ═══ */}
+      {/* ═══ proof ═══ */}
       {cf && (
         <section className="hm-section">
           <div className="wrap">
@@ -249,13 +251,8 @@ export default async function Home() {
               <header className="hm-head">
                 <span className="eyebrow">The result</span>
                 <h2 className="hm-h2">Measured, not estimated</h2>
-                <p className="hm-sub">
-                  {lead!.site.name} &mdash; {lead!.site.city}, {lead!.site.state} &mdash; on {DEMO_DATE}.
-                  Exposure is degree-hours above OSHA&rsquo;s proposed high-heat trigger.
-                </p>
               </header>
             </Reveal>
-
             <Reveal delay={70}>
               <div className="hm-proof">
                 <ShiftCompare
@@ -275,19 +272,15 @@ export default async function Home() {
         </section>
       )}
 
-      {/* ═══ how it works ═══ */}
+      {/* ═══ flow ═══ */}
       <section className="hm-band-light">
         <div className="wrap">
           <Reveal>
             <header className="hm-head">
               <span className="eyebrow">How it works</span>
               <h2 className="hm-h2">Tools return facts. The model returns prose.</h2>
-              <p className="hm-sub">
-                The agent decides what to ask. The data decides what is true. Those are kept strictly apart.
-              </p>
             </header>
           </Reveal>
-
           <Reveal delay={60}>
             <ol className="hm-flow">
               {FLOW.map(([k, d], i) => (
@@ -302,7 +295,7 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ═══ why different ═══ */}
+      {/* ═══ trust ═══ */}
       <section className="hm-section">
         <div className="wrap">
           <Reveal>
@@ -311,34 +304,27 @@ export default async function Home() {
               <h2 className="hm-h2">Built so you can check it</h2>
             </header>
           </Reveal>
-
           <div className="hm-cards">
-            {DIFFERENT.map(([icon, h, p], i) => (
-              <Reveal key={h} delay={i * 70}>
-                <article className="hm-card plain">
-                  <span className="hm-card-ico">
-                    <Icon name={icon} size={19} />
-                  </span>
-                  <h3>{h}</h3>
-                  <p>{p}</p>
-                </article>
+            {DIFFERENT.map(([icon, t, k, d], i) => (
+              <Reveal key={t} delay={i * 70}>
+                <HoverCard icon={icon} title={t} kicker={k} detail={d} />
               </Reveal>
             ))}
           </div>
         </div>
       </section>
 
-      {/* ═══ closing ═══ */}
+      {/* ═══ close ═══ */}
       <section className="hm-section hm-close">
         <div className="wrap">
           <Reveal>
             <div className="hm-final">
-              <Image src="/logo.png" alt="" width={76} height={76} />
+              <Image src="/logo.png" alt="" width={72} height={72} />
               <div>
                 <h2 className="hm-h2" style={{ margin: 0 }}>Why an alpaca?</h2>
                 <p>
-                  Alpacas carry insulation they cannot shed, so keepers watch the thermometer on their behalf
-                  and move them out of the sun before it is too late. That is exactly this job.
+                  Alpacas carry insulation they cannot shed, so keepers watch the thermometer on their behalf.
+                  That is exactly this job.
                 </p>
               </div>
               <Link href="/app" className="btn">

@@ -1,0 +1,213 @@
+/* Theron — home page.
+   One vertical rhythm throughout: every section shares the same padding, every
+   header the same three-part shape (eyebrow, heading, sub). Alternating grounds
+   do the separating so no section needs a rule drawn under it. */
+
+.hm-section     { padding: 104px 0; background: var(--paper); }
+.hm-band-light  { padding: 104px 0; background: var(--card); border-block: 1px solid var(--rule); }
+.hm-hero        { padding: 86px 0 96px; background: var(--paper); position: relative; overflow: hidden; }
+
+.hm-hero::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(680px 380px at 4% -10%, rgba(20,80,160,.08), transparent 64%),
+    radial-gradient(520px 320px at 100% 8%, rgba(196,99,60,.055), transparent 66%);
+}
+.hm-hero .wrap { position: relative; }
+
+@media (max-width: 760px) {
+  .hm-section, .hm-band-light { padding: 66px 0; }
+  .hm-hero { padding: 52px 0 62px; }
+}
+
+/* ── hero ── */
+
+.hm-hero-grid {
+  display: grid; gap: 52px;
+  grid-template-columns: minmax(0, 1.02fr) minmax(0, 1fr);
+  align-items: center;
+}
+@media (max-width: 940px) { .hm-hero-grid { grid-template-columns: 1fr; gap: 38px; } }
+
+.hm-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: var(--cobalt-tint); color: var(--cobalt);
+  border: 1px solid #ccdcf2; border-radius: 999px;
+  padding: 6px 14px 6px 11px;
+  font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: .12em; text-transform: uppercase;
+}
+
+.hm-h1 {
+  margin: 26px 0 0;
+  font-size: clamp(2.15rem, 4.6vw, 3.25rem);
+  line-height: 1.08; letter-spacing: -.042em; font-weight: 675;
+  max-width: 17ch; text-wrap: balance;
+}
+.hm-lede {
+  margin: 22px 0 0; max-width: 52ch;
+  font-size: 1.07rem; line-height: 1.68; color: var(--ink-2);
+}
+.hm-cta { display: flex; gap: 11px; flex-wrap: wrap; margin-top: 32px; }
+
+.hm-facts {
+  display: flex; gap: 34px; flex-wrap: wrap; margin: 40px 0 0;
+  padding-top: 26px; border-top: 1px solid var(--rule);
+}
+.hm-facts dt {
+  font-size: 1.6rem; font-weight: 680; letter-spacing: -.04em;
+  color: var(--cobalt); font-variant-numeric: tabular-nums; line-height: 1;
+}
+.hm-facts dd { margin: 7px 0 0; font-size: .8rem; color: var(--ink-3); max-width: 20ch; line-height: 1.45; }
+
+.hm-hero-visual { min-width: 0; }
+.hm-caption {
+  margin: 13px 2px 0; font-size: .79rem; color: var(--ink-3);
+  line-height: 1.55; max-width: 46ch;
+}
+
+/* ── section headers ── */
+
+.hm-head { max-width: 62ch; margin-bottom: 40px; }
+.hm-head.center { max-width: 54ch; margin-left: auto; margin-right: auto; text-align: center; }
+.hm-h2 {
+  margin: 14px 0 0; font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 665; letter-spacing: -.036em; line-height: 1.16; text-wrap: balance;
+}
+.hm-sub { margin: 15px 0 0; font-size: 1rem; color: var(--ink-2); line-height: 1.68; }
+
+/* ── capability cards ── */
+
+.hm-cards {
+  display: grid; gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(272px, 1fr));
+}
+.hm-card {
+  background: var(--paper); border: 1px solid var(--rule);
+  border-radius: var(--r); padding: 26px 24px; height: 100%;
+}
+.hm-card.plain { background: var(--card); }
+.hm-card-ico {
+  width: 40px; height: 40px; border-radius: 11px;
+  display: grid; place-items: center;
+  background: var(--cobalt-tint); color: var(--cobalt);
+}
+.hm-card h3 {
+  margin: 18px 0 0; font-size: 1.03rem; font-weight: 640;
+  letter-spacing: -.024em; line-height: 1.32;
+}
+.hm-card p { margin: 11px 0 0; font-size: .9rem; color: var(--ink-2); line-height: 1.66; }
+
+/* ── worked example ── */
+
+.hm-demo {
+  max-width: 780px; margin: 0 auto;
+  background: var(--card); border: 1px solid var(--rule);
+  border-radius: var(--r); box-shadow: var(--sh-2); overflow: hidden;
+}
+.hm-demo-q { padding: 22px 26px; border-bottom: 1px solid var(--rule); background: var(--card-2); }
+.hm-demo-q p {
+  margin: 8px 0 0; font-size: 1.08rem; font-weight: 570;
+  letter-spacing: -.022em; color: var(--ink);
+}
+
+.hm-demo-steps { padding: 20px 26px; border-bottom: 1px solid var(--rule); display: flex; flex-direction: column; gap: 11px; }
+.hm-step { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
+.hm-step-dot {
+  width: 7px; height: 7px; border-radius: 50%; background: var(--cobalt);
+  flex: none; transform: translateY(-1px);
+}
+.hm-step code {
+  font-family: var(--mono); font-size: .78rem; color: var(--ink);
+  background: var(--card-2); padding: 2px 7px; border-radius: 4px;
+}
+.hm-step span:last-child { font-size: .84rem; color: var(--ink-3); }
+
+.hm-demo-a { padding: 24px 26px; }
+.hm-demo-a p { margin: 9px 0 0; font-size: .96rem; line-height: 1.72; color: var(--ink-2); }
+.hm-demo-a strong { color: var(--ink); font-weight: 640; }
+.hm-demo-caveat {
+  margin-top: 14px !important; padding: 12px 15px;
+  background: var(--high-tint); border-left: 3px solid var(--high);
+  border-radius: var(--r-xs); font-size: .86rem !important;
+}
+
+/* ── the insight, full bleed ── */
+
+.hm-feature {
+  padding: 84px 0; color: #fff; position: relative; overflow: hidden;
+  background: linear-gradient(135deg, var(--cobalt) 0%, var(--cobalt-2) 60%, #0b2f61 100%);
+}
+.hm-feature::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(700px 320px at 90% 130%, rgba(196,99,60,.34), transparent 70%);
+}
+.hm-feature-in {
+  position: relative; z-index: 1;
+  display: grid; gap: 46px; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  align-items: center;
+}
+@media (max-width: 880px) { .hm-feature-in { grid-template-columns: 1fr; gap: 32px; } .hm-feature { padding: 60px 0; } }
+
+.hm-feature-eyebrow { color: rgba(255,255,255,.6); }
+.hm-feature-line {
+  margin: 18px 0 0; font-size: clamp(1.5rem, 3.4vw, 2.3rem);
+  line-height: 1.22; letter-spacing: -.038em; font-weight: 620; max-width: 22ch;
+}
+.hm-feature-line strong { font-weight: 760; }
+.hm-feature-sub {
+  margin: 16px 0 0; font-size: clamp(1rem, 2vw, 1.25rem); line-height: 1.55;
+  color: rgba(255,255,255,.84); max-width: 40ch; font-weight: 420;
+}
+.hm-feature-sub strong { color: #fff; font-weight: 660; }
+
+.hm-clock { display: flex; gap: 3px; align-items: flex-end; flex-wrap: wrap; }
+.hm-clock i {
+  display: block; width: calc((100% - 69px) / 24); min-width: 6px; height: 32px;
+  background: rgba(255,255,255,.18); border-radius: 2px;
+}
+.hm-clock i.on { background: #fff; height: 54px; }
+.hm-clock-key {
+  width: 100%; display: flex; justify-content: space-between; margin-top: 12px;
+  font-family: var(--mono); font-size: 9px; letter-spacing: .12em;
+  text-transform: uppercase; color: rgba(255,255,255,.55);
+}
+
+/* ── proof ── */
+
+.hm-proof {
+  background: var(--card); border: 1px solid var(--rule);
+  border-radius: var(--r); padding: 30px 28px; box-shadow: var(--sh-2);
+}
+@media (max-width: 560px) { .hm-proof { padding: 22px 18px; } }
+
+/* ── flow ── */
+
+.hm-flow {
+  list-style: none; margin: 0; padding: 0;
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  border: 1px solid var(--rule); border-radius: var(--r);
+  background: var(--paper); overflow: hidden;
+}
+@media (max-width: 900px) { .hm-flow { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 470px) { .hm-flow { grid-template-columns: 1fr; } }
+
+.hm-flow li { padding: 24px 20px; border-right: 1px solid var(--rule); }
+.hm-flow li:last-child { border-right: 0; }
+@media (max-width: 900px) { .hm-flow li { border-bottom: 1px solid var(--rule); } }
+
+.hm-flow-n { font-family: var(--mono); font-size: 9.5px; font-weight: 700; letter-spacing: .16em; color: var(--cobalt); }
+.hm-flow b { display: block; margin-top: 11px; font-size: 1.02rem; font-weight: 645; letter-spacing: -.024em; }
+.hm-flow small { display: block; margin-top: 6px; font-size: .81rem; color: var(--ink-3); line-height: 1.5; }
+
+/* ── close ── */
+
+.hm-close { padding-top: 0; }
+.hm-final {
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r);
+  padding: 32px 30px; box-shadow: var(--sh-1);
+  display: flex; align-items: center; gap: 28px; flex-wrap: wrap;
+}
+.hm-final img { border-radius: 16px; flex: none; }
+.hm-final > div { flex: 1; min-width: 260px; }
+.hm-final p { margin: 11px 0 0; font-size: .94rem; color: var(--ink-2); line-height: 1.66; max-width: 56ch; }

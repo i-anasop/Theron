@@ -6,20 +6,30 @@
  * tool it chose, what that tool established, what it cost — so watching the
  * agent work is itself the demonstration that it is planning rather than
  * pattern-matching a canned answer.
+ *
+ * Live mode is opt-in per request and passes through the shared spend guard.
+ * Cached mode is the default and cannot spend anything at all.
  */
 
 import { runAgent } from "@/lib/agent/agent";
 import { BASELINES } from "@/lib/baselines";
 import { appCache } from "@/lib/cache-factory";
 import { DEMO_DATE, PUBLIC_ROUTES_OFFLINE } from "@/lib/demo";
+import { claimLiveRun, liveQuota, settleLiveRun } from "@/lib/live-guard";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
+
+export async function GET() {
+  // Lets the UI show the live allowance before offering the toggle.
+  return Response.json(liveQuota());
+}
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     goal?: string;
     date?: string;
+    live?: boolean;
     history?: Array<{ role: "user" | "assistant"; content: string }>;
   };
   const goal = body.goal?.trim();
@@ -29,6 +39,25 @@ export async function POST(request: Request) {
       status: 400,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  /*
+   * Default to cached. `offline: true` means the client cannot reach the
+   * network at all, so the common path is structurally incapable of spending
+   * rather than merely budgeted against.
+   */
+  let offline = PUBLIC_ROUTES_OFFLINE;
+  let allowance = 400_000; // generous, but meaningless while offline
+  let liveDenied: string | null = null;
+
+  if (body.live) {
+    const claim = claimLiveRun();
+    if (claim.ok) {
+      offline = false;
+      allowance = claim.allowance;
+    } else {
+      liveDenied = claim.reason;
+    }
   }
 
   const encoder = new TextEncoder();
@@ -44,7 +73,8 @@ export async function POST(request: Request) {
       };
 
       try {
-        send("start", { goal });
+        send("start", { goal, live: !offline, allowance: offline ? 0 : allowance });
+        if (liveDenied) send("notice", { message: liveDenied });
 
         const result = await runAgent({
           goal,
@@ -52,15 +82,19 @@ export async function POST(request: Request) {
           // without dragging an entire session into every request.
           history: (body.history ?? []).slice(-6),
           baselines: BASELINES,
-          allowance: 400_000,
+          allowance,
           cache: appCache(),
-          offline: PUBLIC_ROUTES_OFFLINE,
-          operatingDate: body.date ?? DEMO_DATE,
+          offline,
+          // Live runs work against today; cached runs against the snapshot date,
+          // because that is the day the cache actually holds.
+          operatingDate: body.date ?? (offline ? DEMO_DATE : new Date().toISOString().slice(0, 10)),
           onThinking: (i) => send("thinking", { iteration: i }),
           onToolCall: (name, input) => send("tool", { name, input }),
           onToolResult: (r) => send("tool_done", r),
           onRetry: (s) => send("retry", { seconds: s }),
         });
+
+        if (!offline) settleLiveRun(result.creditsSpent);
 
         send("answer", { answer: result.answer });
         send("done", {
@@ -70,8 +104,11 @@ export async function POST(request: Request) {
           model: result.model,
           trail: result.trail,
           toolCalls: result.toolCalls.length,
+          live: !offline,
+          quota: liveQuota(),
         });
       } catch (err) {
+        if (!offline) settleLiveRun(0);
         send("error", { message: (err as Error).message });
       } finally {
         controller.close();

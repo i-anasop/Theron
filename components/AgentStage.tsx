@@ -51,6 +51,8 @@ export default function AgentStage() {
   const [running, setRunning] = useState(false);
   const [showSug, setShowSug] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [live, setLive] = useState(false);
+  const [quota, setQuota] = useState<{ perRun: number; remaining: number; available: boolean } | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const nextId = useRef(1);
@@ -58,6 +60,13 @@ export default function AgentStage() {
   useEffect(() => {
     if (turns.length) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns]);
+
+  useEffect(() => {
+    fetch("/api/agent/stream")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((q) => q && setQuota(q))
+      .catch(() => {});
+  }, []);
 
   function say(msg: string) {
     setToast(msg);
@@ -112,7 +121,7 @@ export default function AgentStage() {
       const res = await fetch("/api/agent/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ goal: q, history }),
+        body: JSON.stringify({ goal: q, history, live }),
         signal: ac.signal,
       });
       if (!res.ok || !res.body) throw new Error(`Agent unavailable (${res.status})`);
@@ -179,6 +188,9 @@ export default function AgentStage() {
               apiCalls: data.trail?.length ?? 0,
               model: data.model,
             }));
+          } else if (ev === "notice") {
+            say(data.message);
+            setLive(false);
           } else if (ev === "error") {
             patch(id, (t) => ({ ...t, error: data.message, done: true }));
           }
@@ -243,6 +255,31 @@ export default function AgentStage() {
             )}
           </button>
         </div>
+      </div>
+
+      <div className="cmp-mode">
+        <button
+          type="button"
+          className={`cmp-live ${live ? "on" : ""}`}
+          onClick={() => setLive((v) => !v)}
+          aria-pressed={live}
+          disabled={running || (quota ? !quota.available && !live : false)}
+          title={
+            live
+              ? "Live: fetches fresh readings from the Temperature API"
+              : "Cached: answers from data already paid for"
+          }
+        >
+          <span className="cmp-live-dot" aria-hidden />
+          {live ? "Live data" : "Cached data"}
+        </button>
+        <span className="cmp-mode-note">
+          {live
+            ? quota
+              ? `up to ${quota.perRun.toLocaleString()} credits per question · ${quota.remaining.toLocaleString()} left in this session`
+              : "fetches fresh readings"
+            : "free — answers from data already paid for"}
+        </span>
       </div>
 
       {showSug && (

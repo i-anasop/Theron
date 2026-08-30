@@ -44,13 +44,17 @@
 }
 .rail-mark:hover { text-decoration: none; }
 .rail-mark img { border-radius: 9px; flex: none; }
-.rail-mark-name {
-  font-size: 1rem; font-weight: 660; letter-spacing: -.025em; color: var(--ink);
-  opacity: 0; white-space: nowrap; transition: opacity .16s ease;
+/* Collapsed, the wordmark must leave the flow entirely. Merely fading it left
+   it occupying width inside a 44px content box and pushed the mark off-screen. */
+.rail-mark-name { display: none; }
+.rail.open .rail-mark-name {
+  display: inline; font-size: 1rem; font-weight: 660;
+  letter-spacing: -.025em; color: var(--ink); white-space: nowrap;
 }
-.rail.open .rail-mark-name { opacity: 1; }
 
 .rail-nav { display: flex; flex-direction: column; gap: 3px; }
+.rail:not(.open) .rail-item { justify-content: center; padding-left: 0; padding-right: 0; }
+.rail:not(.open) .rail-foot { align-items: center; }
 .rail-item {
   display: flex; align-items: center; gap: 12px;
   padding: 9px 8px; border-radius: 10px; border: 0; background: transparent;
@@ -63,11 +67,11 @@
 .rail-ico { width: 28px; height: 28px; flex: none; display: grid; place-items: center; }
 .rail-ico svg { width: 19px; height: 19px; }
 
-.rail-text {
-  font-size: .89rem; font-weight: 560; letter-spacing: -.014em;
-  white-space: nowrap; opacity: 0; transition: opacity .16s ease;
+.rail-text { display: none; }
+.rail.open .rail-text {
+  display: inline; font-size: .89rem; font-weight: 560;
+  letter-spacing: -.014em; white-space: nowrap;
 }
-.rail.open .rail-text { opacity: 1; }
 
 /* Foot controls are chrome, not destinations: icon-only at every width. */
 /* Always a vertical stack, aligned to the rail's right edge, so the controls

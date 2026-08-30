@@ -8,6 +8,8 @@ import type { CallRecord } from "@/lib/fortyguard/client";
 import HeatChart from "@/components/HeatChart";
 import HeatGrid from "@/components/HeatGrid";
 import AgentConsole from "@/components/AgentConsole";
+import Sparkline from "@/components/Sparkline";
+import Icon from "@/components/Icon";
 
 interface Assessment {
   site: {
@@ -32,12 +34,21 @@ interface Assessment {
 
 interface SweepResponse {
   date: string;
+  ranAt?: string;
   creditsSpent: number;
   apiCalls: number;
   cacheHits: number;
   trail: CallRecord[];
   assessments: Assessment[];
 }
+
+const VERDICT_COPY: Record<string, string> = {
+  reschedule: "Move the shift",
+  stand_down: "Stand down",
+  keep: "Safe as scheduled",
+  screened: "Screened only",
+  unknown: "No data",
+};
 
 export default function Console() {
   const [sweep, setSweep] = useState<SweepResponse | null>(null);
@@ -58,8 +69,7 @@ export default function Console() {
       if (!res.ok) throw new Error(`Sweep failed (${res.status})`);
       const data: SweepResponse = await res.json();
       setSweep(data);
-      const deep = data.assessments.find((a) => a.counterfactual);
-      setFocus((f) => f ?? deep?.site.id ?? data.assessments[0]?.site.id ?? null);
+      setFocus((f) => f ?? data.assessments.find((a) => a.counterfactual)?.site.id ?? null);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -72,149 +82,212 @@ export default function Console() {
   }, []);
 
   const trail = agentTrail ?? sweep?.trail ?? [];
+  const active = sweep?.assessments.find((a) => a.site.id === focus) ?? null;
+  const cf = active?.counterfactual ?? null;
+  const flagged = (sweep?.assessments ?? []).filter(
+    (a) => (a.counterfactual && a.counterfactual.verdict !== "keep") || a.triage?.needsDeepAnalysis,
+  ).length;
+
+  const hours = cf
+    ? [...cf.current.hours, ...cf.proposed.hours]
+        .filter((h, i, arr) => arr.findIndex((x) => x.hourIndex === h.hourIndex) === i)
+        .sort((x, y) => x.hourIndex - y.hourIndex)
+    : [];
 
   return (
-    <div className="wrap" style={{ paddingTop: 40, paddingBottom: 20 }}>
-      <div className="sec-row" style={{ marginBottom: 20 }}>
-        <div>
-          <div className="eyebrow">Live console</div>
-          <h2 style={{ margin: "9px 0 0", fontSize: "1.55rem", fontWeight: 660, letterSpacing: "-.032em" }}>
-            Portfolio
-          </h2>
+    <div className="wrap console-page">
+      {/* ── status strip ── */}
+      <div className="opsbar">
+        <div className="opsbar-live">
+          <span className="beacon" />
+          <div>
+            <span className="label">System</span>
+            <b>Monitoring {sweep?.assessments.length ?? "—"} sites</b>
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-          <span className="label">
-            {sweep
-              ? `${sweep.date} · ${sweep.creditsSpent} credits · ${sweep.cacheHits}/${sweep.apiCalls} cached`
-              : "assessing…"}
-          </span>
-          <button className="btn ghost sm" onClick={runSweep} disabled={sweeping}>
-            {sweeping ? "Sweeping…" : "Re-run"}
-          </button>
+        <div className="opsbar-item">
+          <span className="label">Assessed</span>
+          <b>{sweep?.date ?? "…"}</b>
         </div>
+        <div className="opsbar-item">
+          <span className="label">Needing action</span>
+          <b className={flagged ? "hot" : ""}>{sweep ? flagged : "—"}</b>
+        </div>
+        <div className="opsbar-item">
+          <span className="label">Credits spent</span>
+          <b>{sweep ? sweep.creditsSpent.toLocaleString() : "—"}</b>
+        </div>
+        <div className="opsbar-item">
+          <span className="label">Next autonomous sweep</span>
+          <b>04:00 PT</b>
+        </div>
+        <button className="btn ghost sm" onClick={runSweep} disabled={sweeping}>
+          {sweeping ? "Sweeping…" : "Re-run now"}
+        </button>
       </div>
 
       {error && <div className="err">{error}</div>}
 
-      {/* site selector */}
-      <div className="sitebar">
-        {(sweep?.assessments ?? []).map((a) => {
-          const v = a.counterfactual?.verdict ?? (a.triage ? "screened" : "unknown");
-          return (
-            <button
-              key={a.site.id}
-              className={`sitepill ${focus === a.site.id ? "on" : ""}`}
-              onClick={() => setFocus(a.site.id)}
-            >
-              <span className="sitepill-name">{a.site.city}</span>
-              <span className={`tag ${v}`}>{v.replace("_", " ")}</span>
-            </button>
-          );
-        })}
+      {/* ── portfolio ── */}
+      <div className="portfolio">
+        {sweeping && !sweep
+          ? [0, 1, 2].map((i) => <div key={i} className="sitecard skeleton" />)
+          : (sweep?.assessments ?? []).map((a) => {
+              const v = a.counterfactual?.verdict ?? (a.triage ? "screened" : "unknown");
+              const on = focus === a.site.id;
+              const cfa = a.counterfactual;
+              return (
+                <button
+                  key={a.site.id}
+                  className={`sitecard ${on ? "on" : ""} v-${v}`}
+                  onClick={() => setFocus(a.site.id)}
+                  aria-pressed={on}
+                >
+                  <div className="sitecard-top">
+                    <div>
+                      <div className="sitecard-city">
+                        {a.site.city}, {a.site.state}
+                      </div>
+                      <div className="sitecard-name">{a.site.name}</div>
+                    </div>
+                    <span className={`tag ${v}`}>{v.replace("_", " ")}</span>
+                  </div>
+
+                  {cfa ? (
+                    <Sparkline
+                      values={cfa.current.hours
+                        .concat(cfa.proposed.hours)
+                        .filter((h, i, arr) => arr.findIndex((x) => x.hourIndex === h.hourIndex) === i)
+                        .sort((x, y) => x.hourIndex - y.hourIndex)
+                        .map((h) => h.heatIndexF)}
+                      threshold={90}
+                      shiftFrom={cfa.current.startHour}
+                      shiftTo={cfa.current.endHour}
+                      first={Math.min(...cfa.current.hours.map((h) => h.hourIndex))}
+                      last={Math.max(...cfa.proposed.hours.map((h) => h.hourIndex))}
+                    />
+                  ) : (
+                    <div className="spark-empty" />
+                  )}
+
+                  <div className="sitecard-foot">
+                    <span>
+                      <Icon name="crew" size={13} /> {a.site.crewSize}
+                    </span>
+                    <span>
+                      <Icon name="clock" size={13} /> {a.site.shift.start}&ndash;{a.site.shift.end}
+                    </span>
+                    <strong>
+                      {cfa
+                        ? `${cfa.current.peakHeatIndexF}°F peak`
+                        : a.triage
+                          ? `${a.triage.shiftPeakF}°F peak`
+                          : "—"}
+                    </strong>
+                  </div>
+                </button>
+              );
+            })}
       </div>
 
-      {/* focused site: spatial field + curve side by side */}
-      {focus && (
-        <div className="focus-grid">
-          <HeatGrid siteId={focus} date={DEMO_DATE} />
+      {/* ── focused site ── */}
+      {focus && active && (
+        <div className="focus">
+          <div className="focus-main">
+            <HeatGrid siteId={focus} date={DEMO_DATE} />
+          </div>
 
-          {(() => {
-            const a = sweep?.assessments.find((x) => x.site.id === focus);
-            const cf = a?.counterfactual;
-            if (!a) return null;
-
-            if (!cf) {
-              return (
-                <div className="card" style={{ padding: 20 }}>
-                  <div className="label">Screened, not drilled</div>
-                  <p className="verdict" style={{ marginTop: 10 }}>
-                    {a.triage
-                      ? `Shift peak ${a.triage.shiftPeakF}°F at ${a.triage.humidityPct}% humidity — classified ${a.triage.risk}. Screened with 2 API calls instead of 24.`
-                      : (a.error ?? "No analysis available.")}
-                  </p>
+          <div className="focus-side">
+            <div className={`decision v-${cf?.verdict ?? "screened"}`}>
+              <span className="label">Decision</span>
+              <div className="decision-v">{VERDICT_COPY[cf?.verdict ?? (active.triage ? "screened" : "unknown")]}</div>
+              {cf && (
+                <div className="decision-move">
+                  <span>{cf.current.label}</span>
+                  <i aria-hidden>→</i>
+                  <span className="to">{cf.proposed.label}</span>
                 </div>
-              );
-            }
+              )}
+            </div>
 
-            const hours = [...cf.current.hours, ...cf.proposed.hours]
-              .filter((h, i, arr) => arr.findIndex((x) => x.hourIndex === h.hourIndex) === i)
-              .sort((x, y) => x.hourIndex - y.hourIndex);
-
-            return (
-              <div className="card" style={{ padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-                <div className="sec-row">
-                  <div>
-                    <div className="label">Verdict</div>
-                    <div
-                      style={{
-                        fontSize: "1.28rem",
-                        fontWeight: 660,
-                        letterSpacing: "-.03em",
-                        textTransform: "capitalize",
-                        marginTop: 5,
-                      }}
-                    >
-                      {cf.verdict.replace("_", " ")}
-                    </div>
-                  </div>
-                  <Link href={`/sites/${a.site.id}`} className="btn ghost sm">
-                    Full analysis
-                  </Link>
+            {cf ? (
+              <>
+                <div className="panel" style={{ padding: 16 }}>
+                  <HeatChart
+                    id={`c-${active.site.id}`}
+                    hours={hours}
+                    shiftStart={cf.current.startHour}
+                    shiftEnd={cf.current.endHour}
+                    proposedStart={cf.verdict === "reschedule" ? cf.proposed.startHour : undefined}
+                    proposedEnd={cf.verdict === "reschedule" ? cf.proposed.endHour : undefined}
+                    height={118}
+                  />
                 </div>
 
-                <HeatChart
-                  id={`c-${a.site.id}`}
-                  hours={hours}
-                  shiftStart={cf.current.startHour}
-                  shiftEnd={cf.current.endHour}
-                  proposedStart={cf.verdict === "reschedule" ? cf.proposed.startHour : undefined}
-                  proposedEnd={cf.verdict === "reschedule" ? cf.proposed.endHour : undefined}
-                  height={140}
-                />
-
-                <div className="metrics">
-                  <div className="metric">
+                <div className="kpi-row">
+                  <div className="kpi-box">
                     <span className="label">Peak</span>
-                    <div className="m hot">{cf.current.peakHeatIndexF}&deg;F</div>
+                    <b className="hot">{cf.current.peakHeatIndexF}&deg;</b>
                   </div>
-                  <div className="metric">
+                  <div className="kpi-box">
                     <span className="label">Now</span>
-                    <div className="m">{cf.current.degreeHoursOverTrigger}</div>
+                    <b>{cf.current.degreeHoursOverTrigger}</b>
                   </div>
-                  <div className="metric">
-                    <span className="label">If moved</span>
-                    <div className={`m ${cf.degreeHoursAvoided > 0 ? "good" : ""}`}>
+                  <div className="kpi-box">
+                    <span className="label">Moved</span>
+                    <b className={cf.degreeHoursAvoided > 0 ? "good" : ""}>
                       {cf.proposed.degreeHoursOverTrigger}
-                    </div>
+                    </b>
+                  </div>
+                  <div className="kpi-box lead">
+                    <span className="label">Cut</span>
+                    <b>{cf.percentReduction}%</b>
                   </div>
                 </div>
 
-                <p className="verdict">{cf.headline}</p>
+                <p className="focus-note">{cf.headline}</p>
+
+                <Link href={`/sites/${active.site.id}`} className="btn ghost sm" style={{ alignSelf: "flex-start" }}>
+                  Full analysis &rarr;
+                </Link>
+              </>
+            ) : (
+              <div className="panel" style={{ padding: 18 }}>
+                <span className="label">Screened, not drilled</span>
+                <p className="focus-note" style={{ marginTop: 10 }}>
+                  {active.triage
+                    ? `Shift peak ${active.triage.shiftPeakF}°F at ${active.triage.humidityPct}% humidity, classified ${active.triage.risk}. Two API calls instead of twenty-four.`
+                    : (active.error ?? "No analysis available.")}
+                </p>
               </div>
-            );
-          })()}
+            )}
+          </div>
         </div>
       )}
 
-      {/* agent */}
-      <section style={{ paddingBottom: 28 }}>
-        <div className="sec-head">
-          <div className="eyebrow">Agent</div>
-          <h2>Watch it decide</h2>
+      {/* ── agent ── */}
+      <section className="agent-section">
+        <div className="sec-row" style={{ marginBottom: 16 }}>
+          <div>
+            <div className="eyebrow">Agent</div>
+            <h2 className="sec-h2">Watch it decide</h2>
+          </div>
+          <span className="label">every step shown as it happens</span>
         </div>
         <AgentConsole onTrail={setAgentTrail} />
       </section>
 
-      {/* audit */}
-      <section style={{ paddingTop: 0 }}>
+      {/* ── ledger ── */}
+      <section style={{ paddingTop: 0, paddingBottom: 40 }}>
         <div className="sec-row" style={{ marginBottom: 14 }}>
           <div>
             <div className="eyebrow">Audit trail</div>
-            <h2 style={{ margin: "9px 0 0", fontSize: "1.4rem", fontWeight: 660, letterSpacing: "-.03em" }}>
-              Every call behind the numbers
-            </h2>
+            <h2 className="sec-h2">Every call behind the numbers</h2>
           </div>
-          <span className="label">{trail.length} calls · {trail.filter((c) => c.cached).length} cached</span>
+          <span className="label">
+            {trail.length} calls · {trail.filter((c) => c.cached).length} cached ·{" "}
+            {trail.reduce((n, c) => n + c.credits, 0).toLocaleString()} credits
+          </span>
         </div>
 
         <div className="tablewrap">
@@ -230,7 +303,7 @@ export default function Console() {
               </tr>
             </thead>
             <tbody>
-              {trail.slice(0, 24).map((c, i) => (
+              {trail.slice(0, 20).map((c, i) => (
                 <tr key={i}>
                   <td>
                     <span className={`chip ${c.cached ? "cache" : "live"}`}>{c.cached ? "cache" : "live"}</span>
@@ -242,6 +315,13 @@ export default function Console() {
                   <td className="wrap-cell">{c.note ?? ""}</td>
                 </tr>
               ))}
+              {!trail.length && (
+                <tr>
+                  <td colSpan={6} className="wrap-cell" style={{ textAlign: "center", padding: 26 }}>
+                    No calls yet.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

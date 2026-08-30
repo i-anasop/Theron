@@ -4,7 +4,7 @@ import { sweep } from "@/lib/monitor";
 import { BASELINES } from "@/lib/baselines";
 import { appCache } from "@/lib/cache-factory";
 import { DEMO_DATE, DEMO_SITE_ID } from "@/lib/demo";
-import HeatWaves from "@/components/HeatWaves";
+import ProductWindow from "@/components/ProductWindow";
 import ShiftCompare from "@/components/ShiftCompare";
 import Reveal from "@/components/Reveal";
 import Icon, { type IconName } from "@/components/Icon";
@@ -104,6 +104,12 @@ export default async function Home() {
   const lead = result.assessments.find((a) => a.counterfactual?.verdict === "reschedule");
   const cf = lead?.counterfactual;
 
+  const heroHours = cf
+    ? [...cf.current.hours, ...cf.proposed.hours]
+        .filter((h, i, arr) => arr.findIndex((x) => x.hourIndex === h.hourIndex) === i)
+        .sort((a, b) => a.hourIndex - b.hourIndex)
+    : [];
+
   return (
     <>
       {/* ═══ hero — one screen ═══ */}
@@ -137,7 +143,16 @@ export default async function Home() {
           </div>
 
           <div className="hm-hero-visual">
-            <HeatWaves siteId={DEMO_SITE_ID} date={DEMO_DATE} />
+            {cf && lead && (
+              <ProductWindow
+                siteName={lead.site.name}
+                city={lead.site.city}
+                state={lead.site.state}
+                crewSize={lead.site.crewSize}
+                cf={cf}
+                hours={heroHours}
+              />
+            )}
           </div>
         </div>
 

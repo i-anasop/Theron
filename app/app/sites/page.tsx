@@ -10,6 +10,7 @@ import HeatGrid from "@/components/HeatGrid";
 import Sparkline from "@/components/Sparkline";
 import Icon from "@/components/Icon";
 import ScreenLocation from "@/components/ScreenLocation";
+import RunHistory from "@/components/RunHistory";
 
 interface Assessment {
   site: {
@@ -123,11 +124,9 @@ export default function Monitor() {
           <span className="label">Credits spent</span>
           <b>{sweep ? sweep.creditsSpent.toLocaleString() : "—"}</b>
         </div>
-        <div className="opsbar-item">
-          <span className="label">Next autonomous sweep</span>
-          <b>04:00 PT</b>
-        </div>
       </div>
+
+      <RunHistory compact />
 
       {error && <div className="err">{error}</div>}
 

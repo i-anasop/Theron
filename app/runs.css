@@ -1,0 +1,82 @@
+/* Theron — the autonomous run log. */
+
+.runs {
+  background: var(--card); border: 1px solid var(--rule); border-radius: var(--r);
+  box-shadow: var(--sh-1); overflow: hidden; margin-bottom: 18px;
+}
+
+.runs-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 17px; border-bottom: 1px solid var(--rule); background: var(--card-2);
+}
+.runs-head .label { display: inline-flex; align-items: center; gap: 7px; }
+.runs-cadence {
+  font-family: var(--mono); font-size: 9px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+
+.runs-empty { padding: 20px 17px; font-size: .87rem; color: var(--ink-3); }
+
+.runs-last { padding: 16px 17px 14px; }
+.runs-last-main { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
+.runs-last-main b { font-size: 1.05rem; font-weight: 650; letter-spacing: -.024em; }
+.runs-when { font-family: var(--mono); font-size: .72rem; color: var(--ink-3); }
+
+.runs-badge {
+  font-family: var(--mono); font-size: 8.5px; font-weight: 700;
+  letter-spacing: .12em; text-transform: uppercase;
+  padding: 4px 8px; border-radius: 4px; border: 1px solid transparent;
+}
+.runs-badge.t-schedule { background: var(--safe-tint);   color: var(--safe);   border-color: #bcdcd0; }
+.runs-badge.t-manual   { background: var(--cobalt-tint); color: var(--cobalt); border-color: #c3d5ef; }
+.runs-badge.t-local    { background: var(--card-2);      color: var(--ink-3);  border-color: var(--rule); }
+
+.runs-figures {
+  display: flex; gap: 8px 20px; flex-wrap: wrap; margin-top: 13px;
+  font-size: .8rem; color: var(--ink-3);
+}
+.runs-figures b { color: var(--ink); font-weight: 640; font-variant-numeric: tabular-nums; }
+
+.runs-sites { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 14px; }
+.runs-site {
+  display: inline-flex; align-items: center; gap: 7px;
+  background: var(--card-2); border: 1px solid var(--rule);
+  border-radius: 999px; padding: 5px 11px; font-size: .8rem; color: var(--ink);
+}
+.runs-site i {
+  font-style: normal; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+}
+.runs-site.v-reschedule { background: var(--caution-tint); border-color: #e8d5a8; }
+.runs-site.v-reschedule i { color: #8a6115; }
+.runs-site.v-stand_down { background: var(--extreme-tint); border-color: #eec4bd; }
+.runs-site.v-stand_down i { color: var(--extreme); }
+.runs-site.v-flagged { background: var(--high-tint); border-color: #eed4c6; }
+.runs-site.v-flagged i { color: var(--high); }
+.runs-site.v-error, .runs-site.v-skipped { opacity: .6; }
+
+.runs-list {
+  list-style: none; margin: 0; padding: 0 17px 6px;
+  border-top: 1px solid var(--rule);
+}
+.runs-list li {
+  display: flex; align-items: center; gap: 11px; flex-wrap: wrap;
+  padding: 9px 0; border-bottom: 1px solid var(--rule);
+  font-size: .81rem; color: var(--ink-2);
+}
+.runs-list li:last-child { border-bottom: 0; }
+.runs-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--rule-2); }
+.runs-dot.t-schedule { background: var(--safe); }
+.runs-dot.t-manual { background: var(--cobalt); }
+.runs-li-when { font-weight: 560; color: var(--ink); min-width: 88px; }
+.runs-li-body { font-variant-numeric: tabular-nums; }
+.runs-li-trigger {
+  margin-left: auto; font-family: var(--mono); font-size: 8.5px;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3);
+}
+
+.runs-source {
+  margin: 0; padding: 12px 17px 14px; border-top: 1px solid var(--rule);
+  background: var(--card-2);
+  font-size: .77rem; color: var(--ink-3); line-height: 1.55;
+}

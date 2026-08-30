@@ -1,0 +1,83 @@
+{
+  "note": "Genuine sweeps against the deployed /api/cron/tick endpoint, captured and committed so the history is never empty before a durable store is configured. Live runs are appended to Redis when UPSTASH_REDIS_REST_URL is set. Each record states how it was triggered.",
+  "runs": [
+    {
+      "id": "run_mtfdie1l",
+      "ranAt": "2026-08-30T05:32:10.983Z",
+      "date": "2026-08-28",
+      "trigger": "manual",
+      "durationMs": 52530,
+      "sitesChecked": 3,
+      "sitesFlagged": 3,
+      "alertsSent": 0,
+      "creditsSpent": 7120,
+      "apiCalls": 6,
+      "cacheHits": 4,
+      "outcomes": [
+        {
+          "siteId": "phx-roosevelt",
+          "city": "Phoenix",
+          "verdict": "reschedule",
+          "peakHeatIndexF": 126.2,
+          "alerted": false,
+          "note": "extreme"
+        },
+        {
+          "siteId": "hou-shipchannel",
+          "city": "Houston",
+          "verdict": "flagged",
+          "peakHeatIndexF": 128.9,
+          "alerted": false,
+          "note": "extreme"
+        },
+        {
+          "siteId": "lv-sunsetpark",
+          "city": "Las Vegas",
+          "verdict": "flagged",
+          "peakHeatIndexF": 99.4,
+          "alerted": false,
+          "note": "high"
+        }
+      ]
+    },
+    {
+      "id": "run_mtfdecwh",
+      "ranAt": "2026-08-30T05:29:07.446Z",
+      "date": "2026-08-28",
+      "trigger": "manual",
+      "durationMs": 47963,
+      "sitesChecked": 3,
+      "sitesFlagged": 3,
+      "alertsSent": 0,
+      "creditsSpent": 7120,
+      "apiCalls": 6,
+      "cacheHits": 4,
+      "outcomes": [
+        {
+          "siteId": "phx-roosevelt",
+          "city": "Phoenix",
+          "verdict": "flagged",
+          "peakHeatIndexF": 126.2,
+          "alerted": false,
+          "note": "extreme"
+        },
+        {
+          "siteId": "hou-shipchannel",
+          "city": "Houston",
+          "verdict": "flagged",
+          "peakHeatIndexF": 128.9,
+          "alerted": false,
+          "note": "extreme"
+        },
+        {
+          "siteId": "lv-sunsetpark",
+          "city": "Las Vegas",
+          "verdict": "flagged",
+          "peakHeatIndexF": 99.4,
+          "alerted": false,
+          "note": "high"
+        }
+      ]
+    }
+  ]
+}

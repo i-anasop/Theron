@@ -23,6 +23,7 @@
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "recharts": "^2.15.0",
+    "server-only": "^0.0.1",
     "zod": "^4.5.2"
   },
   "devDependencies": {

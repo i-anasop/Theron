@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { DEMO_DATE } from "@/lib/demo";
 import type { CallRecord } from "@/lib/fortyguard/client";
 import Icon from "@/components/Icon";
+import RunHistory from "@/components/RunHistory";
 
 /**
  * The audit trail as its own destination.
@@ -56,6 +57,8 @@ export default function History() {
           </p>
         </div>
       </div>
+
+      <RunHistory />
 
       <div className="trail-stats">
         <div className="trail-stat">

@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Markdown from "@/components/Markdown";
 
 /**
  * The workspace's front door: a conversation, not a one-shot form.
@@ -34,6 +35,7 @@ interface Turn {
   model?: string;
   done: boolean;
   open: boolean;
+  vote?: "up" | "down";
 }
 
 const SUGGESTIONS = [
@@ -48,6 +50,7 @@ export default function AgentStage() {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [running, setRunning] = useState(false);
   const [showSug, setShowSug] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
   const nextId = useRef(1);
@@ -55,6 +58,16 @@ export default function AgentStage() {
   useEffect(() => {
     if (turns.length) endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [turns]);
+
+  function say(msg: string) {
+    setToast(msg);
+    window.setTimeout(() => setToast(null), 2600);
+  }
+
+  function vote(id: number, dir: "up" | "down") {
+    patch(id, (t) => ({ ...t, vote: t.vote === dir ? undefined : dir }));
+    say(dir === "up" ? "Thanks for the feedback." : "Thanks — noted, we'll use it to improve.");
+  }
 
   function patch(id: number, fn: (t: Turn) => Turn) {
     setTurns((prev) => prev.map((t) => (t.id === id ? fn(t) : t)));
@@ -298,7 +311,24 @@ export default function AgentStage() {
                           <i />
                         </span>
                       )}
+                      <span className="trace-count">
+                        {t.steps.filter((s) => s.state !== "running").length}/{t.steps.length}
+                      </span>
                     </button>
+
+                    {!t.done && (
+                      <div className="trace-bar" aria-hidden>
+                        <span
+                          style={{
+                            width: `${
+                              t.steps.length
+                                ? (t.steps.filter((s) => s.state !== "running").length / t.steps.length) * 100
+                                : 8
+                            }%`,
+                          }}
+                        />
+                      </div>
+                    )}
 
                     {t.open && (
                       <ol className="trace-list">
@@ -317,13 +347,48 @@ export default function AgentStage() {
                   </div>
                 )}
 
-                {t.answer && <div className="turn-answer">{t.answer}</div>}
+                {t.answer && (
+                  <div className="turn-answer">
+                    <Markdown text={t.answer} />
+                  </div>
+                )}
                 {t.error && <div className="err" style={{ marginTop: 10 }}>{t.error}</div>}
 
                 {t.done && t.answer && (
-                  <div className="turn-meta">
-                    <span>{t.apiCalls ?? 0} data lookups</span>
-                    <span>{(t.credits ?? 0).toLocaleString()} credits</span>
+                  <div className="turn-foot">
+                    <div className="turn-meta">
+                      <span>{t.apiCalls ?? 0} data lookups</span>
+                      <span>{(t.credits ?? 0).toLocaleString()} credits</span>
+                      {t.model && <span>{t.model}</span>}
+                    </div>
+                    <div className="vote">
+                      <button
+                        className={t.vote === "up" ? "on" : ""}
+                        onClick={() => vote(t.id, "up")}
+                        aria-label="Good answer"
+                        aria-pressed={t.vote === "up"}
+                        type="button"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+                             strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M7 10.5v9H4.5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1H7Z" />
+                          <path d="M7 10.5 11.2 3a2.2 2.2 0 0 1 2.1 2.9L12.3 9h5.2a2 2 0 0 1 1.95 2.45l-1.3 6A2 2 0 0 1 16.2 19H7" />
+                        </svg>
+                      </button>
+                      <button
+                        className={t.vote === "down" ? "on down" : "down"}
+                        onClick={() => vote(t.id, "down")}
+                        aria-label="Poor answer"
+                        aria-pressed={t.vote === "down"}
+                        type="button"
+                      >
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7"
+                             strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                          <path d="M7 13.5v-9H4.5a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1H7Z" />
+                          <path d="M7 13.5 11.2 21a2.2 2.2 0 0 0 2.1-2.9L12.3 15h5.2a2 2 0 0 0 1.95-2.45l-1.3-6A2 2 0 0 0 16.2 5H7" />
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -334,6 +399,16 @@ export default function AgentStage() {
       </div>
 
       <div className="composer-dock">{composer}</div>
+
+      {toast && (
+        <div className="toast" role="status" aria-live="polite">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4"
+               strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="m5 12.5 5 5 9-11" />
+          </svg>
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

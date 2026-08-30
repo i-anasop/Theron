@@ -18,9 +18,9 @@ export default function Footer() {
         </div>
 
         <div className="foot-links">
-          <Link href="/console">Console</Link>
+          <Link href="/app">Workspace</Link>
           <Link href="/method">Method</Link>
-          <Link href="/impact">Impact</Link>
+          <Link href="/app/impact">Impact</Link>
           <a href="https://github.com/i-anasop/Theron" target="_blank" rel="noreferrer noopener">
             GitHub
           </a>

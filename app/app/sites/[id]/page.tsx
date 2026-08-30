@@ -54,7 +54,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
   return (
     <div className="wrap" style={{ paddingTop: 44 }}>
       <p style={{ margin: 0, fontSize: ".85rem" }}>
-        <Link href="/console">&larr; Console</Link>
+        <Link href="/app/sites">&larr; Monitor</Link>
       </p>
 
       <div className="sec-head" style={{ marginTop: 16 }}>
@@ -72,7 +72,7 @@ export default async function SitePage({ params }: { params: Promise<{ id: strin
         <div className="callout">
           No cached hourly analysis exists for this site on {DEMO_DATE}. The console shows its cheap triage
           screen instead &mdash; Theron only buys the full 24-call curve for sites triage flags.{" "}
-          <Link href="/console">Back to the console &rarr;</Link>
+          <Link href="/app/sites">Back to the console &rarr;</Link>
         </div>
       )}
 

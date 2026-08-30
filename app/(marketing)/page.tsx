@@ -52,8 +52,8 @@ export default async function Home() {
               the day, finds the safest, and shows the measured difference.
             </p>
             <div className="hero-actions">
-              <Link href="/console" className="btn">
-                Open live console
+              <Link href="/app" className="btn">
+                Open the workspace
               </Link>
               <Link href="/method" className="btn ghost">
                 What we found in the API
@@ -202,7 +202,7 @@ export default async function Home() {
                 and move them out of the sun before it is too late. That is exactly this job.
               </p>
             </div>
-            <Link href="/console" className="btn">
+            <Link href="/app" className="btn">
               See it run
             </Link>
           </div>

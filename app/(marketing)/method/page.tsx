@@ -247,7 +247,7 @@ export default function Method() {
         <div className="callout docs-end">
           Raw captures live in <code>probes/</code>; the measured cost model is encoded in{" "}
           <code>lib/fortyguard/cost.ts</code>, where the planner reads it.{" "}
-          <Link href="/console">See it run &rarr;</Link>
+          <Link href="/app">See it run &rarr;</Link>
         </div>
       </article>
     </div>

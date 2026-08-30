@@ -7,7 +7,6 @@ import type { Counterfactual } from "@/lib/analysis/counterfactual";
 import type { CallRecord } from "@/lib/fortyguard/client";
 import HeatChart from "@/components/HeatChart";
 import HeatGrid from "@/components/HeatGrid";
-import AgentConsole from "@/components/AgentConsole";
 import Sparkline from "@/components/Sparkline";
 import Icon from "@/components/Icon";
 
@@ -34,7 +33,6 @@ interface Assessment {
 
 interface SweepResponse {
   date: string;
-  ranAt?: string;
   creditsSpent: number;
   apiCalls: number;
   cacheHits: number;
@@ -50,10 +48,9 @@ const VERDICT_COPY: Record<string, string> = {
   unknown: "No data",
 };
 
-export default function Console() {
+export default function Monitor() {
   const [sweep, setSweep] = useState<SweepResponse | null>(null);
   const [sweeping, setSweeping] = useState(true);
-  const [agentTrail, setAgentTrail] = useState<CallRecord[] | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,7 +78,6 @@ export default function Console() {
     void runSweep();
   }, []);
 
-  const trail = agentTrail ?? sweep?.trail ?? [];
   const active = sweep?.assessments.find((a) => a.site.id === focus) ?? null;
   const cf = active?.counterfactual ?? null;
   const flagged = (sweep?.assessments ?? []).filter(
@@ -95,14 +91,23 @@ export default function Console() {
     : [];
 
   return (
-    <div className="wrap console-page">
-      {/* ── status strip ── */}
+    <div className="page">
+      <div className="page-head">
+        <div>
+          <h1 className="work-h1">Monitor</h1>
+          <p className="work-sub">Live conditions across every worksite Theron watches.</p>
+        </div>
+        <button className="btn ghost sm" onClick={runSweep} disabled={sweeping}>
+          {sweeping ? "Sweeping…" : "Re-run sweep"}
+        </button>
+      </div>
+
       <div className="opsbar">
         <div className="opsbar-live">
           <span className="beacon" />
           <div>
             <span className="label">System</span>
-            <b>Monitoring {sweep?.assessments.length ?? "—"} sites</b>
+            <b>{sweep?.assessments.length ?? "—"} sites monitored</b>
           </div>
         </div>
         <div className="opsbar-item">
@@ -121,14 +126,10 @@ export default function Console() {
           <span className="label">Next autonomous sweep</span>
           <b>04:00 PT</b>
         </div>
-        <button className="btn ghost sm" onClick={runSweep} disabled={sweeping}>
-          {sweeping ? "Sweeping…" : "Re-run now"}
-        </button>
       </div>
 
       {error && <div className="err">{error}</div>}
 
-      {/* ── portfolio ── */}
       <div className="portfolio">
         {sweeping && !sweep
           ? [0, 1, 2].map((i) => <div key={i} className="sitecard skeleton" />)
@@ -190,7 +191,6 @@ export default function Console() {
             })}
       </div>
 
-      {/* ── focused site ── */}
       {focus && active && (
         <div className="focus">
           <div className="focus-main">
@@ -200,7 +200,9 @@ export default function Console() {
           <div className="focus-side">
             <div className={`decision v-${cf?.verdict ?? "screened"}`}>
               <span className="label">Decision</span>
-              <div className="decision-v">{VERDICT_COPY[cf?.verdict ?? (active.triage ? "screened" : "unknown")]}</div>
+              <div className="decision-v">
+                {VERDICT_COPY[cf?.verdict ?? (active.triage ? "screened" : "unknown")]}
+              </div>
               {cf && (
                 <div className="decision-move">
                   <span>{cf.current.label}</span>
@@ -247,7 +249,11 @@ export default function Console() {
 
                 <p className="focus-note">{cf.headline}</p>
 
-                <Link href={`/sites/${active.site.id}`} className="btn ghost sm" style={{ alignSelf: "flex-start" }}>
+                <Link
+                  href={`/app/sites/${active.site.id}`}
+                  className="btn ghost sm"
+                  style={{ alignSelf: "flex-start" }}
+                >
                   Full analysis &rarr;
                 </Link>
               </>
@@ -264,68 +270,6 @@ export default function Console() {
           </div>
         </div>
       )}
-
-      {/* ── agent ── */}
-      <section className="agent-section">
-        <div className="sec-row" style={{ marginBottom: 16 }}>
-          <div>
-            <div className="eyebrow">Agent</div>
-            <h2 className="sec-h2">Watch it decide</h2>
-          </div>
-          <span className="label">every step shown as it happens</span>
-        </div>
-        <AgentConsole onTrail={setAgentTrail} />
-      </section>
-
-      {/* ── ledger ── */}
-      <section style={{ paddingTop: 0, paddingBottom: 40 }}>
-        <div className="sec-row" style={{ marginBottom: 14 }}>
-          <div>
-            <div className="eyebrow">Audit trail</div>
-            <h2 className="sec-h2">Every call behind the numbers</h2>
-          </div>
-          <span className="label">
-            {trail.length} calls · {trail.filter((c) => c.cached).length} cached ·{" "}
-            {trail.reduce((n, c) => n + c.credits, 0).toLocaleString()} credits
-          </span>
-        </div>
-
-        <div className="tablewrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Source</th>
-                <th>Endpoint</th>
-                <th>Credits</th>
-                <th>Latency</th>
-                <th>Activity ID</th>
-                <th>Purpose</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trail.slice(0, 20).map((c, i) => (
-                <tr key={i}>
-                  <td>
-                    <span className={`chip ${c.cached ? "cache" : "live"}`}>{c.cached ? "cache" : "live"}</span>
-                  </td>
-                  <td className="m">{c.endpoint}</td>
-                  <td className="m">{c.credits.toLocaleString()}</td>
-                  <td className="m">{c.durationMs} ms</td>
-                  <td className="m">{c.activityId ? c.activityId.slice(0, 8) : "—"}</td>
-                  <td className="wrap-cell">{c.note ?? ""}</td>
-                </tr>
-              ))}
-              {!trail.length && (
-                <tr>
-                  <td colSpan={6} className="wrap-cell" style={{ textAlign: "center", padding: 26 }}>
-                    No calls yet.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </div>
   );
 }
